@@ -9,9 +9,12 @@ tauri-build = { version = "2.0", features = [] }
 
 [dependencies]
 tauri = { version = "2.0", features = [] }
+tauri-plugin-shell = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 shikicrate = { path = "../shikicrate" }
+reqwest = { version = "0.13", features = ["json", "rustls"] }
+image = { version = "0.25", default-features = false, features = ["webp", "jpeg", "png"] }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

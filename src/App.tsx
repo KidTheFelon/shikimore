@@ -1,26 +1,273 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as openUrl } from "@tauri-apps/plugin-shell";
+import DetailView from "./components/DetailView";
+import CharacterDetailView from "./components/CharacterDetailView";
 import "./App.css";
+
+interface ApiError {
+  kind: "validation" | "http" | "graphql" | "rate_limit" | "api" | "serialization" | "not_found";
+  message: string;
+  retry_after?: number;
+}
+
+export interface Date {
+  year?: number;
+  month?: number;
+  day?: number;
+  date?: string;
+}
+
+export interface Genre {
+  id: number;
+  name: string;
+  russian?: string;
+  kind?: string;
+}
+
+export interface Studio {
+  id: number;
+  name: string;
+  image_url?: string;
+}
+
+export interface Publisher {
+  id: number;
+  name: string;
+}
+
+export interface ExternalLink {
+  id?: number;
+  kind: string;
+  url: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PersonRole {
+  id: number;
+  roles_ru?: string[];
+  roles_en?: string[];
+  person: Person;
+}
+
+export interface CharacterRole {
+  id: number;
+  roles_ru?: string[];
+  roles_en?: string[];
+  character: Character;
+}
+
+export interface Poster {
+  main?: string;
+  original?: string;
+  preview?: string;
+  x96?: string;
+  x48?: string;
+}
+
+export interface RelatedAnime {
+  id?: number;
+  name?: string;
+  russian?: string;
+  image?: Poster;
+}
+
+export interface RelatedManga {
+  id?: number;
+  name?: string;
+  russian?: string;
+  image?: Poster;
+}
+
+export interface Related {
+  id: number;
+  anime?: RelatedAnime;
+  manga?: RelatedManga;
+  relation_kind: string;
+  relation_text?: string;
+}
+
+export interface Video {
+  id: number;
+  url?: string;
+  name?: string;
+  kind?: string;
+  player_url?: string;
+  image_url?: string;
+}
+
+export interface Screenshot {
+  id: number;
+  original_url?: string;
+  x166_url?: string;
+  x332_url?: string;
+}
+
+export interface ScoreStat {
+  score: number;
+  count: number;
+}
+
+export interface StatusStat {
+  status: string;
+  count: number;
+}
 
 interface Anime {
   id: number;
   title: string;
+  russian?: string;
   url?: string;
   poster_url?: string;
-  description?: string;
   score?: number;
   kind?: string;
   status?: string;
   episodes?: number;
+  episodes_aired?: number;
 }
 
-interface SearchResult {
-  items: Anime[];
+interface Manga {
+  id: number;
+  title: string;
+  russian?: string;
+  url?: string;
+  poster_url?: string;
+  score?: number;
+  kind?: string;
+  status?: string;
+  volumes?: number;
+  chapters?: number;
+}
+
+export interface AnimeDetail {
+  id: number;
+  mal_id?: number;
+  title: string;
+  russian?: string;
+  license_name_ru?: string;
+  english?: string;
+  japanese?: string;
+  synonyms?: string[];
+  url?: string;
+  poster_url?: string;
+  description?: string;
+  description_html?: string;
+  description_source?: string;
+  score?: number;
+  kind?: string;
+  rating?: string;
+  status?: string;
+  episodes?: number;
+  episodes_aired?: number;
+  duration?: number;
+  aired_on?: Date;
+  released_on?: Date;
+  season?: string;
+  next_episode_at?: string;
+  is_censored?: boolean;
+  genres?: Genre[];
+  studios?: Studio[];
+  external_links?: ExternalLink[];
+  person_roles?: PersonRole[];
+  character_roles?: CharacterRole[];
+  related?: Related[];
+  videos?: Video[];
+  screenshots?: Screenshot[];
+  scores_stats?: ScoreStat[];
+  statuses_stats?: StatusStat[];
+  fansubbers?: string[];
+  fandubbers?: string[];
+  licensors?: string[];
+}
+
+export interface MangaDetail {
+  id: number;
+  mal_id?: number;
+  title: string;
+  russian?: string;
+  license_name_ru?: string;
+  english?: string;
+  japanese?: string;
+  synonyms?: string[];
+  url?: string;
+  poster_url?: string;
+  description?: string;
+  description_html?: string;
+  description_source?: string;
+  score?: number;
+  kind?: string;
+  status?: string;
+  volumes?: number;
+  chapters?: number;
+  aired_on?: Date;
+  released_on?: Date;
+  is_censored?: boolean;
+  genres?: Genre[];
+  publishers?: Publisher[];
+  external_links?: ExternalLink[];
+  person_roles?: PersonRole[];
+  character_roles?: CharacterRole[];
+  related?: Related[];
+  scores_stats?: ScoreStat[];
+  statuses_stats?: StatusStat[];
+  licensors?: string[];
+}
+
+interface Character {
+  id: number;
+  name: string;
+  russian?: string;
+  url?: string;
+  poster_url?: string;
+  description?: string;
+  is_anime?: boolean;
+  is_manga?: boolean;
+  is_ranobe?: boolean;
+}
+
+export interface CharacterDetail {
+  id: number;
+  name: string;
+  russian?: string;
+  japanese?: string;
+  synonyms: string[];
+  url?: string;
+  poster_url?: string;
+  description?: string;
+  description_html?: string;
+  character_roles: CharacterRoleDetail[];
+}
+
+export interface CharacterRoleDetail {
+  id: number;
+  roles_ru: string[];
+  anime?: Anime;
+  manga?: Manga;
+}
+
+interface Person {
+  id: number;
+  name: string;
+  russian?: string;
+  url?: string;
+  poster_url?: string;
+  is_seyu?: boolean;
+  is_mangaka?: boolean;
+  is_producer?: boolean;
+  website?: string;
+}
+
+type ContentItem = Anime | Manga | Character | Person;
+
+interface SearchResult<T> {
+  items: T[];
   page: number;
   limit: number;
 }
 
+export type ContentType = "anime" | "manga" | "characters" | "people";
 type SortOption = "relevance" | "score" | "title";
 
 interface Toast {
@@ -30,7 +277,40 @@ interface Toast {
 }
 
 function App() {
-  const [animeList, setAnimeList] = useState<Anime[]>([]);
+  const [contentType, setContentType] = useState<ContentType>("anime");
+  // ... existing state ...
+
+  const formatStatus = (status?: string) => {
+    const statuses: Record<string, string> = {
+      anons: "Анонсировано",
+      ongoing: "Онгоинг",
+      released: "Выпущено",
+    };
+    return status ? statuses[status] || status : null;
+  };
+
+  const formatKind = (kind?: string) => {
+    const kinds: Record<string, string> = {
+      tv: "ТВ",
+      movie: "Фильм",
+      ova: "OVA",
+      ona: "ONA",
+      special: "Спешл",
+      music: "Клип",
+      tv_13: "ТВ-13",
+      tv_24: "ТВ-24",
+      tv_48: "ТВ-48",
+      manga: "Манга",
+      manhwa: "Манхва",
+      manhua: "Маньхуа",
+      novel: "Ранобэ",
+      one_shot: "Ваншот",
+      doujin: "Додзинси",
+    };
+    return kind ? kinds[kind] || kind.toUpperCase() : null;
+  };
+
+  const [contentList, setContentList] = useState<ContentItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -45,8 +325,26 @@ function App() {
   const [searchHistory, setSearchHistory] = useState<string[]>([]);
   const [showHistory, setShowHistory] = useState(false);
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<{ type: ContentType; id: number } | null>(null);
+  const [detailData, setDetailData] = useState<AnimeDetail | MangaDetail | CharacterDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [cardColors, setCardColors] = useState<Record<number, string>>({});
+
+  const handleImageLoad = async (e: React.SyntheticEvent<HTMLImageElement, Event>, id: number) => {
+    const url = e.currentTarget.src;
+    if (url && !cardColors[id]) {
+      try {
+        const color = await invoke<string>("get_accent_color", { url });
+        setCardColors(prev => ({ ...prev, [id]: color }));
+      } catch (err) {
+        // Игнорируем ошибки получения цвета
+      }
+    }
+  };
+
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const animeItemsRef = useRef<(HTMLDivElement | null)[]>([]);
+  const contentItemsRef = useRef<(HTMLDivElement | null)[]>([]);
   const debounceTimerRef = useRef<number | null>(null);
   const appWindow = getCurrentWindow();
 
@@ -98,23 +396,23 @@ function App() {
         setShowHistory(false);
       }
       // Навигация по карточкам стрелками
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && animeItemsRef.current.length > 0) {
-        const currentIndex = animeItemsRef.current.findIndex(
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && contentItemsRef.current.length > 0) {
+        const currentIndex = contentItemsRef.current.findIndex(
           (el) => el === document.activeElement
         );
         if (currentIndex !== -1) {
           e.preventDefault();
           const nextIndex = e.key === "ArrowDown" 
-            ? Math.min(currentIndex + 1, animeItemsRef.current.length - 1)
+            ? Math.min(currentIndex + 1, contentItemsRef.current.length - 1)
             : Math.max(currentIndex - 1, 0);
-          animeItemsRef.current[nextIndex]?.focus();
+          contentItemsRef.current[nextIndex]?.focus();
         }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [animeList.length]);
+  }, [contentList.length]);
 
   // Закрытие истории при клике вне
   useEffect(() => {
@@ -146,7 +444,27 @@ function App() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  const fetchAnime = useCallback(async (query: string, page: number, kind: string, append: boolean = false) => {
+  const handleApiError = (err: unknown): string => {
+    if (typeof err === "object" && err !== null && "kind" in err) {
+      const apiError = err as ApiError;
+      if (apiError.kind === "rate_limit" && apiError.retry_after) {
+        return `${apiError.message} (повторить через ${apiError.retry_after} сек)`;
+      }
+      return apiError.message;
+    }
+    if (err instanceof Error) {
+      return err.message;
+    }
+    return "Ошибка при загрузке";
+  };
+
+  const fetchContent = useCallback(async (
+    type: ContentType,
+    query: string,
+    page: number,
+    kind: string,
+    append: boolean = false
+  ) => {
     if (append) {
       setLoadingMore(true);
     } else {
@@ -155,32 +473,69 @@ function App() {
     }
     
     try {
-      const result = await invoke<SearchResult>("search_anime", {
-        query,
-        page,
-        limit,
-        kind: kind || undefined,
-      });
+      let result: SearchResult<ContentItem>;
+      
+      if (type === "anime") {
+        console.log("Вызов search_anime с параметрами:", { query, page, limit, kind: kind || undefined });
+        try {
+          result = await invoke<SearchResult<Anime>>("search_anime", {
+            query,
+            page,
+            limit,
+            kind: kind || undefined,
+          });
+          console.log("search_anime успешно, получено результатов:", result.items.length);
+        } catch (invokeErr) {
+          console.error("Ошибка при вызове search_anime:", invokeErr);
+          throw invokeErr;
+        }
+      } else if (type === "manga") {
+        result = await invoke<SearchResult<Manga>>("search_manga", {
+          query,
+          page,
+          limit,
+          kind: kind || undefined,
+        });
+      } else if (type === "characters") {
+        result = await invoke<SearchResult<Character>>("search_characters", {
+          page,
+          limit,
+          ids: undefined,
+        });
+      } else {
+        result = await invoke<SearchResult<Person>>("search_people", {
+          query,
+          limit,
+        });
+      }
       
       let sorted = [...result.items];
       if (sortBy === "score") {
-        sorted.sort((a, b) => (b.score || 0) - (a.score || 0));
+        sorted.sort((a, b) => {
+          const scoreA = "score" in a ? (a.score || 0) : 0;
+          const scoreB = "score" in b ? (b.score || 0) : 0;
+          return scoreB - scoreA;
+        });
       } else if (sortBy === "title") {
-        sorted.sort((a, b) => a.title.localeCompare(b.title));
+        sorted.sort((a, b) => {
+          const titleA = "title" in a ? a.title : "name" in a ? a.name : "";
+          const titleB = "title" in b ? b.title : "name" in b ? b.name : "";
+          return titleA.localeCompare(titleB);
+        });
       }
       
       if (append) {
-        setAnimeList(prev => [...prev, ...sorted]);
+        setContentList(prev => [...prev, ...sorted]);
       } else {
-        setAnimeList(sorted);
+        setContentList(sorted);
       }
       
       setHasMore(result.items.length === limit);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "Ошибка при загрузке";
+      const errorMessage = handleApiError(err);
       setError(errorMessage);
       if (!append) {
-        setAnimeList([]);
+        setContentList([]);
       }
     } finally {
       if (append) {
@@ -202,11 +557,11 @@ function App() {
 
     debounceTimerRef.current = window.setTimeout(() => {
       setIsSearching(false);
-      if (searchQuery) {
+      if (searchQuery || contentType === "characters") {
         setCurrentPage(1);
         setHasMore(true);
-        fetchAnime(searchQuery, 1, kindFilter, false);
-        if (!searchHistory.includes(searchQuery)) {
+        fetchContent(contentType, searchQuery, 1, kindFilter, false);
+        if (searchQuery && !searchHistory.includes(searchQuery)) {
           const newHistory = [searchQuery, ...searchHistory.filter((q) => q !== searchQuery)].slice(0, 5);
           setSearchHistory(newHistory);
           localStorage.setItem("shikimore_search_history", JSON.stringify(newHistory));
@@ -219,12 +574,12 @@ function App() {
         window.clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [searchQuery, kindFilter, fetchAnime, searchHistory]);
+  }, [searchQuery, kindFilter, contentType, fetchContent, searchHistory]);
 
   // Ленивая пагинация при прокрутке
   useEffect(() => {
     const handleScroll = () => {
-      if (!loading && !loadingMore && hasMore && searchQuery && animeList.length > 0) {
+      if (!loading && !loadingMore && hasMore && (searchQuery || contentType === "characters") && contentList.length > 0) {
         const windowHeight = window.innerHeight;
         const documentHeight = document.documentElement.scrollHeight;
         const scrollTop = window.scrollY || document.documentElement.scrollTop;
@@ -233,20 +588,20 @@ function App() {
         if (scrollTop + windowHeight >= documentHeight * 0.8) {
           const nextPage = currentPage + 1;
           setCurrentPage(nextPage);
-          fetchAnime(searchQuery, nextPage, kindFilter, true);
+          fetchContent(contentType, searchQuery, nextPage, kindFilter, true);
         }
       }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [loading, loadingMore, hasMore, searchQuery, currentPage, kindFilter, fetchAnime, animeList.length]);
+  }, [loading, loadingMore, hasMore, searchQuery, currentPage, kindFilter, contentType, fetchContent, contentList.length]);
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
     setCurrentPage(1);
     setHasMore(true);
-    setAnimeList([]);
+    setContentList([]);
     setShowHistory(e.target.value.length === 0 && searchHistory.length > 0);
   };
 
@@ -259,7 +614,7 @@ function App() {
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.currentTarget.blur();
-      fetchAnime(searchQuery, 1, kindFilter);
+      fetchContent(contentType, searchQuery, 1, kindFilter);
     }
   };
 
@@ -267,25 +622,158 @@ function App() {
     setKindFilter(e.target.value);
     setCurrentPage(1);
     setHasMore(true);
-    setAnimeList([]);
+    setContentList([]);
+  };
+
+  const handleContentTypeChange = (newType: ContentType) => {
+    setContentType(newType);
+    setContentList([]);
+    setCurrentPage(1);
+    setHasMore(true);
+    setKindFilter("");
+    if (newType === "characters") {
+      fetchContent(newType, "", 1, "", false);
+    }
   };
 
   const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setSortBy(e.target.value as SortOption);
     setCurrentPage(1);
     setHasMore(true);
-    setAnimeList([]);
+    setContentList([]);
   };
 
   const handleRetry = () => {
-    fetchAnime(searchQuery, currentPage, kindFilter);
+    fetchContent(contentType, searchQuery, currentPage, kindFilter);
   };
 
-  const handleAnimeClick = (anime: Anime) => {
-    if (anime.url) {
-      window.open(anime.url, "_blank", "noopener,noreferrer");
+  const fetchAnimeDetails = useCallback(async (id: number) => {
+    setLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const detail = await invoke<AnimeDetail>("get_anime_by_id", { id });
+      setDetailData(detail);
+    } catch (err) {
+      const errorMessage = handleApiError(err);
+      setDetailError(errorMessage);
+      showToast(errorMessage, "error");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, [showToast]);
+
+  const fetchMangaDetails = useCallback(async (id: number) => {
+    setLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const detail = await invoke<MangaDetail>("get_manga_by_id", { id });
+      setDetailData(detail);
+    } catch (err) {
+      const errorMessage = handleApiError(err);
+      setDetailError(errorMessage);
+      showToast(errorMessage, "error");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, [showToast]);
+
+  const fetchCharacterDetails = useCallback(async (id: number) => {
+    setLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const detail = await invoke<CharacterDetail>("get_character_details", { id });
+      setDetailData(detail);
+    } catch (err) {
+      const errorMessage = handleApiError(err);
+      setDetailError(errorMessage);
+      showToast(errorMessage, "error");
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, [showToast]);
+
+  const handleBackToList = () => {
+    setSelectedItem(null);
+    setDetailData(null);
+    setDetailError(null);
+  };
+
+  const handleContentClick = (item: ContentItem) => {
+    console.log("Клик по элементу:", item);
+    
+    // Проверяем тип элемента более надежным способом
+    // В аниме есть episodes, в манге - volumes или chapters
+    const isAnime = "episodes" in item;
+    const isManga = ("volumes" in item || "chapters" in item) && !isAnime;
+    const isCharacter = "name" in item && !isAnime && !isManga && !("is_seyu" in item);
+    
+    console.log("Определение типа:", { isAnime, isManga, isCharacter, id: item.id });
+    
+    if (isAnime || isManga || isCharacter) {
+      const type = isAnime ? "anime" : isManga ? "manga" : "characters";
+      console.log(`Открытие экрана деталей для ${type} (ID: ${item.id})`);
+      
+      // Используем данные из списка для быстрого отображения
+      if (isAnime) {
+        const basicDetail: AnimeDetail = {
+          id: item.id,
+          title: "title" in item ? item.title : "",
+          url: "url" in item ? item.url : undefined,
+          poster_url: "poster_url" in item ? item.poster_url : undefined,
+          description: "description" in item ? item.description : undefined,
+          score: "score" in item ? item.score : undefined,
+          kind: "kind" in item ? item.kind : undefined,
+          status: "status" in item ? item.status : undefined,
+        } as AnimeDetail;
+        setDetailData(basicDetail);
+      } else if (isManga) {
+        const basicDetail: MangaDetail = {
+          id: item.id,
+          title: "title" in item ? item.title : "",
+          url: "url" in item ? item.url : undefined,
+          poster_url: "poster_url" in item ? item.poster_url : undefined,
+          description: "description" in item ? item.description : undefined,
+          score: "score" in item ? item.score : undefined,
+          kind: "kind" in item ? item.kind : undefined,
+          status: "status" in item ? item.status : undefined,
+        } as MangaDetail;
+        setDetailData(basicDetail);
+      } else {
+        const basicDetail: CharacterDetail = {
+          id: item.id,
+          name: "name" in item ? item.name : "",
+          russian: "russian" in item ? item.russian : undefined,
+          url: "url" in item ? item.url : undefined,
+          poster_url: "poster_url" in item ? item.poster_url : undefined,
+          description: "description" in item ? item.description : undefined,
+          synonyms: [],
+          character_roles: [],
+        } as CharacterDetail;
+        setDetailData(basicDetail);
+      }
+      
+      setSelectedItem({ type, id: item.id });
+    } else {
+      // Для людей открываем ссылку
+      const url = "url" in item ? item.url : undefined;
+      if (url) {
+        openUrl(url);
+      }
     }
   };
+
+  // Загрузка деталей при выборе элемента
+  useEffect(() => {
+    if (selectedItem) {
+      if (selectedItem.type === "anime") {
+        fetchAnimeDetails(selectedItem.id);
+      } else if (selectedItem.type === "manga") {
+        fetchMangaDetails(selectedItem.id);
+      } else if (selectedItem.type === "characters") {
+        fetchCharacterDetails(selectedItem.id);
+      }
+    }
+  }, [selectedItem, fetchAnimeDetails, fetchMangaDetails, fetchCharacterDetails]);
 
   const handleCopyLink = async (e: React.MouseEvent, url: string) => {
     e.stopPropagation();
@@ -393,12 +881,12 @@ function App() {
   );
 
   return (
-    <div className="container">
-      <header className={`header ${isHeaderScrolled ? "header-scrolled" : ""}`} data-tauri-drag-region>
+    <div className={`container ${selectedItem ? "container-detail" : ""}`}>
+      <header className={`header ${(isHeaderScrolled || selectedItem) ? "header-scrolled" : ""}`} data-tauri-drag-region>
         <div className="header-content">
-          <div className="header-text">
+          <div className="header-text" onClick={handleBackToList} style={{ cursor: 'pointer' }}>
             <h1>Shikimore</h1>
-            {!isHeaderScrolled && (
+            {!isHeaderScrolled && !selectedItem && (
               <p className="header-subtitle">
                 Нажмите <kbd>Ctrl+K</kbd> для быстрого поиска
               </p>
@@ -460,241 +948,434 @@ function App() {
         </div>
       </header>
 
-      <div className="search-controls">
-        <div className="search-input-wrapper">
-          <SearchIcon />
-          <input
-            ref={searchInputRef}
-            type="text"
-            className="search-input"
-            placeholder="Поиск аниме... (Enter для поиска)"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            onKeyDown={handleSearchKeyDown}
-            onFocus={handleSearchFocus}
-            aria-label="Поиск аниме"
-            aria-describedby="search-hint"
+      {selectedItem ? (
+        selectedItem.type === "characters" ? (
+          <CharacterDetailView
+            data={detailData as CharacterDetail}
+            loading={loadingDetail}
+            error={detailError}
+            onBack={handleBackToList}
+            onNavigate={(type: ContentType, id: number) => {
+              setSelectedItem({ type, id });
+              setDetailData(null);
+            }}
           />
-          {isSearching && (
-            <div className="search-indicator" aria-label="Поиск..." />
-          )}
-          {showHistory && searchHistory.length > 0 && (
-            <div className="search-history">
-              <div className="search-history-header">Недавние запросы</div>
-              {searchHistory.map((query, idx) => (
-                <button
-                  key={idx}
-                  className="search-history-item"
-                  onClick={() => handleHistorySelect(query)}
-                  type="button"
-                >
-                  <SearchIcon />
-                  {query}
-                </button>
-              ))}
-            </div>
-          )}
-          <span id="search-hint" className="sr-only">
-            Используйте Enter для поиска, Esc для очистки
-          </span>
-        </div>
-        <select
-          className="kind-filter"
-          value={kindFilter}
-          onChange={handleKindChange}
-          aria-label="Фильтр по типу"
-        >
-          <option value="">Все типы</option>
-          <option value="tv">TV</option>
-          <option value="movie">Movie</option>
-          <option value="ova">OVA</option>
-          <option value="ona">ONA</option>
-          <option value="special">Special</option>
-          <option value="music">Music</option>
-        </select>
-        <select
-          className="kind-filter sort-filter"
-          value={sortBy}
-          onChange={handleSortChange}
-          aria-label="Сортировка"
-          title="Сортировка результатов"
-        >
-          <option value="relevance">По релевантности</option>
-          <option value="score">По рейтингу</option>
-          <option value="title">По названию</option>
-        </select>
-      </div>
-
-      {loading && (
-        <div className="status-message loading" role="status" aria-live="polite">
-          <div className="loading-spinner" aria-label="Загрузка" />
-        </div>
-      )}
-
-      {error && (
-        <div className="status-message error" role="alert">
-          <ErrorIcon />
-          <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Ошибка</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.95rem', opacity: 0.9 }}>{error}</p>
-          <button
-            onClick={handleRetry}
-            className="retry-btn"
-            aria-label="Повторить попытку"
-          >
-            Повторить попытку
-          </button>
-        </div>
-      )}
-
-      {!loading && !error && animeList.length === 0 && searchQuery && (
-        <div className="status-message empty">
-          <EmptyIcon />
-          <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Ничего не найдено</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.95rem' }}>
-            Попробуйте изменить запрос или фильтры
-          </p>
-        </div>
-      )}
-
-      {!loading && !error && animeList.length === 0 && !searchQuery && (
-        <div className="status-message empty">
-          <EmptyIcon />
-          <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Начните поиск</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.95rem' }}>
-            Введите название аниме в поле поиска
-          </p>
-          <div className="search-examples">
-            <p style={{ margin: '1.5rem 0 0.75rem', fontSize: '0.9rem', opacity: 0.7 }}>
-              Попробуйте найти:
-            </p>
-            <div className="example-queries">
-              {["Наруто", "Атака титанов", "Ван Пис", "Демон-убийца"].map((example) => (
-                <button
-                  key={example}
-                  className="example-query-btn"
-                  onClick={() => setSearchQuery(example)}
-                  type="button"
-                >
-                  {example}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {loading && (
-        <div className="anime-list">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-      )}
-
-      {!loading && !error && animeList.length > 0 && (
+        ) : (
+          <DetailView
+            data={detailData as AnimeDetail | MangaDetail}
+            type={selectedItem.type as "anime" | "manga"}
+            loading={loadingDetail}
+            error={detailError}
+            onBack={handleBackToList}
+            onNavigate={(type: ContentType, id: number) => {
+              setSelectedItem({ type, id });
+              setDetailData(null);
+            }}
+            onSearchGenre={(_genreId, genreName) => {
+              setSelectedItem(null);
+              setDetailData(null);
+              setContentType(selectedItem!.type as ContentType);
+              setSearchQuery(genreName);
+            }}
+            onSearchStudio={(_studioId, studioName) => {
+              setSelectedItem(null);
+              setDetailData(null);
+              setContentType("anime");
+              setSearchQuery(studioName);
+            }}
+            onSearchPublisher={(_publisherId, publisherName) => {
+              setSelectedItem(null);
+              setDetailData(null);
+              setContentType("manga");
+              setSearchQuery(publisherName);
+            }}
+          />
+        )
+      ) : (
         <>
-          <div className="results-count">
-            Найдено: {animeList.length} {animeList.length === 1 ? 'результат' : 'результатов'}
-            {hasMore && ' • Прокрутите вниз для загрузки'}
-          </div>
-          <div className="anime-list" role="list">
-            {animeList.map((anime, index) => (
-              <div
-                key={anime.id}
-                ref={(el) => {
-                  animeItemsRef.current[index] = el;
-                }}
-                className="anime-item"
-                role="listitem"
-                onClick={() => handleAnimeClick(anime)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    handleAnimeClick(anime);
-                  }
-                }}
-                tabIndex={0}
-                aria-label={`${anime.title}, рейтинг ${anime.score || "неизвестен"}`}
+          <div className="search-controls">
+            <div className="content-type-tabs">
+              <button
+                className={`content-type-tab ${contentType === "anime" ? "active" : ""}`}
+                onClick={() => handleContentTypeChange("anime")}
+                type="button"
               >
-                <div className="anime-poster-wrapper">
-                  {anime.poster_url ? (
-                    <img
-                      src={anime.poster_url}
-                      alt={anime.title}
-                      className="anime-poster"
-                      loading="lazy"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                        const placeholder = target.nextElementSibling as HTMLElement;
-                        if (placeholder) placeholder.style.display = 'flex';
-                      }}
-                    />
-                  ) : null}
-                  <div className="anime-poster-placeholder" style={{ display: anime.poster_url ? 'none' : 'flex' }}>
-                    Нет изображения
-                  </div>
+                Аниме
+              </button>
+              <button
+                className={`content-type-tab ${contentType === "manga" ? "active" : ""}`}
+                onClick={() => handleContentTypeChange("manga")}
+                type="button"
+              >
+                Манга
+              </button>
+              <button
+                className={`content-type-tab ${contentType === "characters" ? "active" : ""}`}
+                onClick={() => handleContentTypeChange("characters")}
+                type="button"
+              >
+                Персонажи
+              </button>
+              <button
+                className={`content-type-tab ${contentType === "people" ? "active" : ""}`}
+                onClick={() => handleContentTypeChange("people")}
+                type="button"
+              >
+                Люди
+              </button>
+            </div>
+            <div className="search-input-wrapper">
+              <SearchIcon />
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="search-input"
+                placeholder={
+                  contentType === "anime" ? "Поиск аниме... (Enter для поиска)" :
+                  contentType === "manga" ? "Поиск манги... (Enter для поиска)" :
+                  contentType === "characters" ? "Поиск персонажей... (Enter для поиска)" :
+                  "Поиск людей... (Enter для поиска)"
+                }
+                value={searchQuery}
+                onChange={handleSearchChange}
+                onKeyDown={handleSearchKeyDown}
+                onFocus={handleSearchFocus}
+                aria-label={`Поиск ${contentType === "anime" ? "аниме" : contentType === "manga" ? "манги" : contentType === "characters" ? "персонажей" : "людей"}`}
+                aria-describedby="search-hint"
+              />
+              {isSearching && (
+                <div className="search-indicator" aria-label="Поиск..." />
+              )}
+              {showHistory && searchHistory.length > 0 && (
+                <div className="search-history">
+                  <div className="search-history-header">Недавние запросы</div>
+                  {searchHistory.map((query, idx) => (
+                    <button
+                      key={idx}
+                      className="search-history-item"
+                      onClick={() => handleHistorySelect(query)}
+                      type="button"
+                    >
+                      <SearchIcon />
+                      {query}
+                    </button>
+                  ))}
                 </div>
-                <div className="anime-content">
-                  <h3 className="anime-title">{anime.title}</h3>
-                  <div className="anime-meta">
-                    {anime.score && (
-                      <span className="anime-score">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-                          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-                        </svg>
-                        {anime.score.toFixed(1)}
-                      </span>
-                    )}
-                    {anime.kind && (
-                      <span className="anime-kind">{anime.kind.toUpperCase()}</span>
-                    )}
-                    {anime.status && (
-                      <span className="anime-status">{anime.status}</span>
-                    )}
-                    {anime.episodes && (
-                      <span className="anime-episodes">{anime.episodes} эп.</span>
-                    )}
-                  </div>
-                  {anime.description && (
-                    <p className="anime-description">{anime.description}</p>
-                  )}
-                  {anime.url && (
-                    <div className="anime-actions">
-                      <a
-                        href={anime.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="anime-link"
-                        onClick={(e) => e.stopPropagation()}
-                        title="Открыть на Shikimori"
-                        aria-label="Открыть на Shikimori"
-                      >
-                        Открыть на Shikimori
-                        <ExternalLinkIcon />
-                      </a>
-                      <button
-                        onClick={(e) => handleCopyLink(e, anime.url!)}
-                        className="copy-link-btn"
-                        title="Копировать ссылку"
-                        aria-label="Копировать ссылку"
-                      >
-                        <CopyIcon />
-                      </button>
-                    </div>
-                  )}
+              )}
+              <span id="search-hint" className="sr-only">
+                Используйте Enter для поиска, Esc для очистки
+              </span>
+            </div>
+            <div className="search-controls-row">
+            {(contentType === "anime" || contentType === "manga") && (
+              <select
+                className="kind-filter"
+                value={kindFilter}
+                onChange={handleKindChange}
+                aria-label="Фильтр по типу"
+              >
+                <option value="">Все типы</option>
+                {contentType === "anime" ? (
+                  <>
+                    <option value="tv">TV</option>
+                    <option value="movie">Movie</option>
+                    <option value="ova">OVA</option>
+                    <option value="ona">ONA</option>
+                    <option value="special">Special</option>
+                    <option value="music">Music</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="manga">Manga</option>
+                    <option value="novel">Novel</option>
+                    <option value="one_shot">One Shot</option>
+                    <option value="doujin">Doujin</option>
+                    <option value="manhwa">Manhwa</option>
+                    <option value="manhua">Manhua</option>
+                  </>
+                )}
+              </select>
+            )}
+            <select
+              className="kind-filter sort-filter"
+              value={sortBy}
+              onChange={handleSortChange}
+              aria-label="Сортировка"
+              title="Сортировка результатов"
+            >
+              <option value="relevance">По релевантности</option>
+              <option value="score">По рейтингу</option>
+              <option value="title">По названию</option>
+            </select>
+            </div>
+          </div>
+
+          {loading && (
+            <div className="status-message loading" role="status" aria-live="polite">
+              <div className="loading-spinner" aria-label="Загрузка" />
+            </div>
+          )}
+
+          {error && (
+            <div className="status-message error" role="alert">
+              <ErrorIcon />
+              <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Ошибка</p>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.95rem', opacity: 0.9 }}>{error}</p>
+              <button
+                onClick={handleRetry}
+                className="retry-btn"
+                aria-label="Повторить попытку"
+              >
+                Повторить попытку
+              </button>
+            </div>
+          )}
+
+          {!loading && !error && contentList.length === 0 && (searchQuery || contentType === "characters") && (
+            <div className="status-message empty">
+              <EmptyIcon />
+              <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Ничего не найдено</p>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.95rem' }}>
+                Попробуйте изменить запрос или фильтры
+              </p>
+            </div>
+          )}
+
+          {!loading && !error && contentList.length === 0 && !searchQuery && contentType !== "characters" && (
+            <div className="status-message empty">
+              <EmptyIcon />
+              <p style={{ margin: 0, fontSize: '1.1rem', fontWeight: 600 }}>Начните поиск</p>
+              <p style={{ margin: '0.5rem 0 0', fontSize: '0.95rem' }}>
+                {contentType === "anime" ? "Введите название аниме в поле поиска" :
+                 contentType === "manga" ? "Введите название манги в поле поиска" :
+                 "Введите имя в поле поиска"}
+              </p>
+              <div className="search-examples">
+                <p style={{ margin: '1.5rem 0 0.75rem', fontSize: '0.9rem', opacity: 0.7 }}>
+                  Попробуйте найти:
+                </p>
+                <div className="example-queries">
+                  {["Наруто", "Атака титанов", "Ван Пис", "Демон-убийца"].map((example) => (
+                    <button
+                      key={example}
+                      className="example-query-btn"
+                      onClick={() => setSearchQuery(example)}
+                      type="button"
+                    >
+                      {example}
+                    </button>
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-        </>
-      )}
+            </div>
+          )}
 
-      {loadingMore && (
-        <div className="loading-more" style={{ textAlign: 'center', padding: '2rem', marginTop: '2rem' }}>
-          <div className="loading-spinner" aria-label="Загрузка" />
-          <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>Загрузка...</p>
-        </div>
+          {loading && (
+            <div className="anime-list">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          )}
+
+          {!loading && !error && contentList.length > 0 && (
+            <>
+              <div className="results-count">
+                Найдено: {contentList.length} {contentList.length === 1 ? 'результат' : 'результатов'}
+                {hasMore && ' • Прокрутите вниз для загрузки'}
+              </div>
+          <div className="anime-list" role="list">
+            {contentList.map((item, index) => {
+              const russianTitle = "russian" in item ? item.russian : undefined;
+              const originalTitle = "title" in item ? item.title : "name" in item ? item.name : "";
+              const displayTitle = russianTitle || originalTitle;
+              const subTitle = russianTitle && russianTitle !== originalTitle ? originalTitle : undefined;
+              
+              // Расчет параметров бегущей строки
+              const marqueeParams = (text: string) => {
+                const charWidth = 9.5; 
+                const textWidth = text.length * charWidth;
+                const containerWidth = 210; // Увеличил запас, чтобы короткие не крутились
+                const isLong = textWidth > containerWidth;
+                
+                if (!isLong) {
+                  return { isLong: false, style: {} };
+                }
+
+                const moveDistance = textWidth + 32; 
+                const totalDuration = (moveDistance / 50) / 0.7;
+                
+                return { 
+                  isLong: true, 
+                  style: { "--marquee-duration": `${totalDuration}s` } as React.CSSProperties 
+                };
+              };
+
+              const titleParams = marqueeParams(displayTitle);
+              const subTitleParams = subTitle ? marqueeParams(subTitle) : { isLong: false, style: {} };
+              
+              const url = "url" in item ? item.url : undefined;
+              const posterUrl = "poster_url" in item ? item.poster_url : undefined;
+              const score = "score" in item ? item.score : undefined;
+              
+              const episodes = "episodes" in item ? item.episodes : undefined;
+              const aired = "episodes_aired" in item ? item.episodes_aired : undefined;
+              
+              return (
+                <div
+                  key={item.id}
+                  ref={(el) => {
+                    contentItemsRef.current[index] = el;
+                  }}
+                  className="anime-item"
+                  role="listitem"
+                  onClick={() => handleContentClick(item)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleContentClick(item);
+                    }
+                  }}
+                  tabIndex={0}
+                  aria-label={`${displayTitle}, ${score ? `рейтинг ${score.toFixed(1)}` : "без рейтинга"}`}
+                >
+                  <div className="anime-poster-wrapper">
+                    {score !== undefined && (
+                      <div className="anime-card-score">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+                        </svg>
+                        {score.toFixed(1)}
+                      </div>
+                    )}
+                    {("kind" in item) && item.kind && (
+                      <div className="anime-card-kind">
+                        {formatKind(item.kind as string)}
+                      </div>
+                    )}
+                    {/* Счетчик эпизодов для онгоингов или если есть инфа о вышедших сериях */}
+                    {("episodes" in item) && (typeof aired === 'number' || item.status === "ongoing") && (aired !== undefined || episodes !== undefined) && (
+                      <div 
+                        className="anime-card-episodes"
+                        style={{ background: cardColors[item.id] || 'rgba(40, 40, 60, 0.85)' }}
+                      >
+                        {typeof aired === 'number' ? `${aired} / ${episodes || "?"} эп.` : `${episodes || "?"} эп.`}
+                      </div>
+                    )}
+                    {posterUrl ? (
+                      <img
+                        src={posterUrl}
+                        alt={displayTitle}
+                        className="anime-poster"
+                        loading="lazy"
+                        onLoad={(e) => handleImageLoad(e, item.id)}
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                          const placeholder = target.nextElementSibling as HTMLElement;
+                          if (placeholder) placeholder.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <div className="anime-poster-placeholder" style={{ display: posterUrl ? 'none' : 'flex' }}>
+                      Нет изображения
+                    </div>
+                  </div>
+                  <div className="anime-content">
+                    <div className="anime-title-container">
+                      <div className={`anime-marquee-inner ${titleParams.isLong ? 'is-marquee' : ''}`} style={titleParams.style}>
+                        <h3 className="anime-title">{displayTitle}</h3>
+                        {titleParams.isLong && <h3 className="anime-title spacer">{displayTitle}</h3>}
+                      </div>
+                    </div>
+                    {subTitle && (
+                      <div className="anime-title-container">
+                        <div className={`anime-marquee-inner ${subTitleParams.isLong ? 'is-marquee' : ''}`} style={subTitleParams.style}>
+                          <p className="anime-russian">{subTitle}</p>
+                          {subTitleParams.isLong && <p className="anime-russian spacer">{subTitle}</p>}
+                        </div>
+                      </div>
+                    )}
+                    <div className="anime-meta-simple">
+                      {("kind" in item || "status" in item) && (
+                        <span>
+                          {item.kind ? formatKind(item.kind) : ""}
+                          {item.kind && item.status ? " • " : ""}
+                          {item.status ? formatStatus(item.status) : ""}
+                          {("episodes" in item) && (episodes || typeof aired === 'number') ? (
+                            <>
+                              {" • "}
+                              {typeof aired === 'number'
+                                ? `${aired} / ${episodes || "?"} эп.` 
+                                : `${episodes || "?"} эп.`}
+                            </>
+                          ) : null}
+                          {("chapters" in item) && item.chapters ? ` • ${item.chapters} гл.` : null}
+                        </span>
+                      )}
+                    </div>
+                    {url && (
+                          <div className="anime-actions">
+                            <a
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="anime-link"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openUrl(url);
+                              }}
+                              title="Открыть на Shikimori"
+                              aria-label="Открыть на Shikimori"
+                            >
+                              Открыть на Shikimori
+                              <ExternalLinkIcon />
+                            </a>
+                            <button
+                              onClick={(e) => handleCopyLink(e, url)}
+                              className="copy-link-btn"
+                              title="Копировать ссылку"
+                              aria-label="Копировать ссылку"
+                            >
+                              <CopyIcon />
+                            </button>
+                          </div>
+                        )}
+                        {"website" in item && item.website && (
+                          <div className="anime-actions">
+                            <a
+                              href={item.website}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="anime-link"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openUrl(item.website as string);
+                              }}
+                              title="Официальный сайт"
+                            >
+                              Официальный сайт
+                              <ExternalLinkIcon />
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {loadingMore && (
+            <div className="loading-more" style={{ textAlign: 'center', padding: '2rem', marginTop: '2rem' }}>
+              <div className="loading-spinner" aria-label="Загрузка" />
+              <p style={{ marginTop: '1rem', color: 'var(--text-secondary)' }}>Загрузка...</p>
+            </div>
+          )}
+        </>
       )}
 
       <div className="toast-container">
