@@ -11,7 +11,7 @@ tauri-build = { version = "2.0", features = [] }
 tauri = { version = "2.0", features = [] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-shikicrate = "0.2.1"
+shikicrate = { path = "../shikicrate" }
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

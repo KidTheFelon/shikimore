@@ -6,22 +6,36 @@
 
 - Node.js 18+
 - Rust 1.70+
-- Tauri CLI
+- Git (для работы с подмодулями)
 
 ## Установка
 
 ```bash
+# Клонируй репозиторий с подмодулями
+git clone --recursive <repository-url>
+# Или если уже склонировал без --recursive
+git submodule update --init --recursive
+
 # Установка зависимостей фронтенда
 npm install
-
-# Установка Tauri CLI (если еще не установлен)
-cargo install tauri-cli
 ```
+
+Tauri CLI устанавливается автоматически как dev-зависимость через npm.
 
 ## Разработка
 
 ```bash
 npm run tauri dev
+```
+
+## Тестирование
+
+```bash
+# Запуск тестов
+npm test
+
+# Запуск тестов с UI
+npm run test:ui
 ```
 
 ## Сборка
@@ -35,3 +49,4 @@ npm run tauri build
 - `src/` - React фронтенд
 - `src-tauri/` - Rust бэкенд с Tauri
 - `src-tauri/src/main.rs` - Tauri команды и интеграция с shikicrate
+- `shikicrate/` - Git submodule, Rust клиент для Shikimori GraphQL API

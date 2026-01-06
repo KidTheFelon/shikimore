@@ -1,3 +1,4 @@
 [submodule "shikicrate"]
 	path = shikicrate
 	url = https://github.com/KidTheFelon/shikicrate
+	branch = main
