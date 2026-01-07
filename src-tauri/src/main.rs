@@ -2,10 +2,77 @@
 // Временно отключено для отладки
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::sync::{Mutex, OnceLock};
+use std::collections::HashMap;
+use std::time::Duration;
+use std::fs;
+use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
+use tauri::Manager;
+use tauri_plugin_autostart::MacosLauncher;
 use shikicrate::{ShikicrateClient, ShikicrateError};
-use reqwest;
-use image;
+
+static ACCENT_CACHE: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
+static HTTP_CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppSettings {
+    pub theme: String,             // "dark", "light", "system"
+    pub nsfw: bool,
+    pub accent_color: String,
+    pub preferred_language: String, // "russian", "original"
+    pub view_mode: String,          // "grid", "list"
+    pub autostart: bool,
+    pub tray: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            theme: "dark".to_string(),
+            nsfw: false,
+            accent_color: "#646cff".to_string(),
+            preferred_language: "russian".to_string(),
+            view_mode: "grid".to_string(),
+            autostart: false,
+            tray: false,
+        }
+    }
+}
+
+fn get_config_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
+    let path = app_handle.path().app_config_dir().map_err(|e| format!("Failed to get config dir: {}", e))?;
+    if !path.exists() {
+        fs::create_dir_all(&path).map_err(|e| format!("Failed to create config dir: {}", e))?;
+    }
+    Ok(path.join("config.json"))
+}
+
+#[tauri::command]
+fn get_settings(app_handle: tauri::AppHandle) -> AppSettings {
+    match get_config_path(&app_handle) {
+        Ok(path) => {
+            if path.exists() {
+                let content = fs::read_to_string(path).unwrap_or_default();
+                serde_json::from_str(&content).unwrap_or_else(|_| AppSettings::default())
+            } else {
+                AppSettings::default()
+            }
+        },
+        Err(e) => {
+            eprintln!("Error getting config path: {}", e);
+            AppSettings::default()
+        }
+    }
+}
+
+#[tauri::command]
+fn update_settings(app_handle: tauri::AppHandle, settings: AppSettings) -> Result<(), String> {
+    let path = get_config_path(&app_handle)?;
+    let content = serde_json::to_string_pretty(&settings).map_err(|e| e.to_string())?;
+    fs::write(path, content).map_err(|e| format!("Failed to write config: {}", e))?;
+    Ok(())
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct ApiError {
@@ -112,6 +179,7 @@ struct CharacterDetail {
     description: Option<String>,
     description_html: Option<String>,
     character_roles: Vec<CharacterRoleDetail>,
+    seyus: Vec<Person>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -336,16 +404,136 @@ struct MangaDetail {
     licensors: Option<Vec<String>>,
 }
 
+// REST API structures for character details
+#[derive(Debug, Deserialize)]
+struct RestImage {
+    original: Option<String>,
+    #[allow(dead_code)]
+    preview: Option<String>,
+    #[allow(dead_code)]
+    x96: Option<String>,
+    #[allow(dead_code)]
+    x48: Option<String>,
+}
+
+fn deser_id<'de, D>(deserializer: D) -> Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: serde_json::Value = serde::Deserialize::deserialize(deserializer)?;
+    match v {
+        serde_json::Value::Number(n) => n.as_i64().ok_or_else(|| serde::de::Error::custom("Invalid ID number")),
+        serde_json::Value::String(s) => s.parse().map_err(serde::de::Error::custom),
+        _ => Err(serde::de::Error::custom("Expected ID as number or string")),
+    }
+}
+
+fn deser_score<'de, D>(deserializer: D) -> Result<Option<f64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let v: Option<serde_json::Value> = serde::Deserialize::deserialize(deserializer)?;
+    match v {
+        Some(serde_json::Value::Number(n)) => Ok(n.as_f64()),
+        Some(serde_json::Value::String(s)) => {
+            if s.is_empty() || s == "0.0" || s == "0" {
+                Ok(None)
+            } else {
+                s.parse::<f64>().map(Some).map_err(serde::de::Error::custom)
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RestSeyu {
+    #[serde(deserialize_with = "deser_id")]
+    id: i64,
+    name: Option<String>,
+    russian: Option<String>,
+    image: Option<RestImage>,
+    url: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestAnime {
+    #[serde(deserialize_with = "deser_id")]
+    id: i64,
+    name: Option<String>,
+    russian: Option<String>,
+    image: Option<RestImage>,
+    url: Option<String>,
+    kind: Option<String>,
+    #[serde(deserialize_with = "deser_score")]
+    score: Option<f64>,
+    status: Option<String>,
+    episodes: Option<i32>,
+    episodes_aired: Option<i32>,
+    #[serde(default)]
+    roles: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestManga {
+    #[serde(deserialize_with = "deser_id")]
+    id: i64,
+    name: Option<String>,
+    russian: Option<String>,
+    image: Option<RestImage>,
+    url: Option<String>,
+    kind: Option<String>,
+    #[serde(deserialize_with = "deser_score")]
+    score: Option<f64>,
+    status: Option<String>,
+    volumes: Option<i32>,
+    chapters: Option<i32>,
+    #[serde(default)]
+    roles: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RestCharacter {
+    #[serde(deserialize_with = "deser_id")]
+    id: i64,
+    name: Option<String>,
+    russian: Option<String>,
+    japanese: Option<String>,
+    altname: Option<String>,
+    image: Option<RestImage>,
+    url: Option<String>,
+    description: Option<String>,
+    description_html: Option<String>,
+    #[allow(dead_code)]
+    description_source: Option<String>,
+    #[serde(default)]
+    seyu: Vec<RestSeyu>,
+    #[serde(default)]
+    animes: Vec<RestAnime>,
+    #[serde(default)]
+    mangas: Vec<RestManga>,
+}
+
+
 
 #[tauri::command]
 async fn search_anime(
+    app_handle: tauri::AppHandle,
     query: String,
+    ids: Option<String>,
     page: Option<u32>,
     limit: Option<u32>,
     kind: Option<String>,
+    status: Option<String>,
+    season: Option<String>,
+    rating: Option<String>,
+    genre: Option<String>,
+    studio: Option<String>,
+    order: Option<String>,
 ) -> Result<SearchResult<Anime>, ApiError> {
-    println!(">>> [Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}", query, page, limit, kind);
+    println!(">>> [Backend] search_anime вызвана: query='{}', ids={:?}, page={:?}, limit={:?}, kind={:?}, status={:?}, studio={:?}, order={:?}", query, ids, page, limit, kind, status, studio, order);
     
+    let settings = get_settings(app_handle);
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
 
@@ -365,10 +553,17 @@ async fn search_anime(
     
     let params = AnimeSearchParams {
         search: if query.is_empty() { None } else { Some(query.clone()) },
-        ids: None,
+        ids,
         limit: Some(limit as i32),
         page: Some(page as i32),
-        kind: kind.clone(),
+        kind,
+        status,
+        season,
+        rating,
+        genre,
+        studio,
+        order,
+        censored: Some(!settings.nsfw),
     };
     
     println!(">>> [Backend] Выполнение запроса к API...");
@@ -411,12 +606,62 @@ async fn search_anime(
 }
 
 #[tauri::command]
-async fn search_manga(
+async fn search_anime_lite(
+    app_handle: tauri::AppHandle,
     query: String,
+    kind: Option<String>,
+    status: Option<String>,
+    genre: Option<String>,
+    studio: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<Anime>, ApiError> {
+    let settings = get_settings(app_handle);
+    let client = ShikicrateClient::new().map_err(ApiError::from)?;
+    let limit = limit.unwrap_or(50);
+    
+    use shikicrate::queries::AnimeSearchParams;
+    let params = AnimeSearchParams {
+        search: if query.is_empty() { None } else { Some(query) },
+        ids: None,
+        limit: Some(limit as i32),
+        page: Some(1),
+        kind,
+        status,
+        genre,
+        studio,
+        censored: Some(!settings.nsfw),
+        ..Default::default()
+    };
+    
+    let animes = client.animes_lite(params).await.map_err(ApiError::from)?;
+    Ok(animes.into_iter().map(|a| Anime {
+        id: a.id,
+        title: a.name,
+        russian: a.russian,
+        url: None,
+        poster_url: None,
+        score: None,
+        kind: None,
+        status: None,
+        episodes: None,
+        episodes_aired: None,
+    }).collect())
+}
+
+#[tauri::command]
+async fn search_manga(
+    app_handle: tauri::AppHandle,
+    query: String,
+    ids: Option<String>,
     page: Option<u32>,
     limit: Option<u32>,
     kind: Option<String>,
+    status: Option<String>,
+    genre: Option<String>,
+    publisher: Option<String>,
+    order: Option<String>,
 ) -> Result<SearchResult<Manga>, ApiError> {
+    let settings = get_settings(app_handle);
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
 
@@ -426,10 +671,15 @@ async fn search_manga(
     
     let params = MangaSearchParams {
         search: if query.is_empty() { None } else { Some(query) },
-        ids: None,
+        ids,
         limit: Some(limit as i32),
         page: Some(page as i32),
-        kind: kind.clone(),
+        kind,
+        status,
+        genre,
+        publisher,
+        order,
+        censored: Some(!settings.nsfw),
     };
     
     let mangas = client.mangas(params).await.map_err(ApiError::from)?;
@@ -459,6 +709,7 @@ async fn search_manga(
 
 #[tauri::command]
 async fn search_characters(
+    query: String,
     page: Option<u32>,
     limit: Option<u32>,
     ids: Option<Vec<String>>,
@@ -469,6 +720,7 @@ async fn search_characters(
     
     if let Some(ids) = ids {
         let params = CharacterSearchParams {
+            search: None,
             page: None,
             limit: None,
             ids: Some(ids),
@@ -504,6 +756,7 @@ async fn search_characters(
     let limit_val = limit.unwrap_or(20);
     
     let params = CharacterSearchParams {
+        search: if query.is_empty() { None } else { Some(query) },
         page: Some(page_val as i32),
         limit: Some(limit_val as i32),
         ids: None,
@@ -535,27 +788,84 @@ async fn search_characters(
 
 #[tauri::command]
 async fn get_character_details(id: i64) -> Result<CharacterDetail, ApiError> {
+    println!("--- [Backend] Вызов get_character_details REST (ID: {}) ---", id);
     let client = ShikicrateClient::new().map_err(ApiError::from)?;
     
-    let character = client.character_detail(id).await
-        .map_err(ApiError::from)?
-        .ok_or_else(|| ApiError {
-            kind: "not_found".to_string(),
-            message: "Персонаж не найден".to_string(),
-            retry_after: None,
-        })?;
+    // Используем REST API для получения полной информации (сейю, аниме, манга) в одном запросе
+    let character = client.get_rest::<RestCharacter, ()>(&format!("characters/{}", id), None)
+        .await
+        .map_err(ApiError::from)?;
         
+    let mut roles = Vec::new();
+    
+    // Мапим аниме роли
+    for a in character.animes {
+        roles.push(CharacterRoleDetail {
+            id: a.id,
+            roles_ru: a.roles,
+            anime: Some(Anime {
+                id: a.id,
+                title: a.name.unwrap_or_else(|| "Unknown".to_string()),
+                russian: a.russian,
+                url: fix_url(a.url),
+                poster_url: a.image.and_then(|img| fix_url(img.original)),
+                score: a.score,
+                kind: a.kind,
+                status: a.status,
+                episodes: a.episodes,
+                episodes_aired: a.episodes_aired,
+            }),
+            manga: None,
+        });
+    }
+    
+    // Мапим манга роли
+    for m in character.mangas {
+        roles.push(CharacterRoleDetail {
+            id: m.id,
+            roles_ru: m.roles,
+            anime: None,
+            manga: Some(Manga {
+                id: m.id,
+                title: m.name.unwrap_or_else(|| "Unknown".to_string()),
+                russian: m.russian,
+                url: fix_url(m.url),
+                poster_url: m.image.and_then(|img| fix_url(img.original)),
+                score: m.score,
+                kind: m.kind,
+                status: m.status,
+                volumes: m.volumes,
+                chapters: m.chapters,
+            }),
+        });
+    }
+
     Ok(CharacterDetail {
         id: character.id,
-        name: character.name,
+        name: character.name.unwrap_or_else(|| "Unknown".to_string()),
         russian: character.russian,
         japanese: character.japanese,
-        synonyms: character.synonyms.unwrap_or_default(),
-        url: character.url,
-        poster_url: character.poster.and_then(|p| p.original_url),
+        synonyms: character.altname
+            .map(|s| s.split(", ").map(|item| item.to_string()).collect())
+            .unwrap_or_default(),
+        url: fix_url(character.url),
+        poster_url: character.image.and_then(|img| fix_url(img.original)),
         description: character.description,
         description_html: character.description_html,
-        character_roles: Vec::new(), // В GraphQL Shikimori пока нет поля roles для персонажа
+        character_roles: roles,
+        seyus: character.seyu.into_iter().map(|s| {
+            Person {
+                id: s.id,
+                name: s.name.unwrap_or_else(|| "Unknown".to_string()),
+                russian: s.russian,
+                url: fix_url(s.url),
+                poster_url: s.image.and_then(|img| fix_url(img.original)),
+                is_seyu: Some(true),
+                is_mangaka: None,
+                is_producer: None,
+                website: None,
+            }
+        }).collect(),
     })
 }
 
@@ -901,15 +1211,58 @@ async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
 }
 
 #[tauri::command]
-async fn get_accent_color(url: String) -> Result<String, String> {
-    let bytes = reqwest::get(&url)
-        .await
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
-        .map_err(|e| e.to_string())?;
+async fn search_studios(query: String) -> Result<Vec<Studio>, ApiError> {
+    let client = ShikicrateClient::new().map_err(ApiError::from)?;
+    let studios = client.studios(if query.is_empty() { None } else { Some(query) }).await.map_err(ApiError::from)?;
+    Ok(studios.into_iter().map(convert_studio).collect())
+}
 
-    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+#[tauri::command]
+async fn search_publishers(query: String) -> Result<Vec<Publisher>, ApiError> {
+    let client = ShikicrateClient::new().map_err(ApiError::from)?;
+    let publishers = client.publishers(if query.is_empty() { None } else { Some(query) }).await.map_err(ApiError::from)?;
+    Ok(publishers.into_iter().map(convert_publisher).collect())
+}
+
+#[tauri::command]
+async fn get_genres() -> Result<Vec<Genre>, ApiError> {
+    let client = ShikicrateClient::new().map_err(ApiError::from)?;
+    let genres = client.genres().await.map_err(ApiError::from)?;
+    Ok(genres.into_iter().map(convert_genre).collect())
+}
+
+#[tauri::command]
+async fn get_accent_color(url: String) -> Result<String, String> {
+    // 1. Проверка кэша
+    let cache = ACCENT_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Some(color) = cache.lock().unwrap().get(&url) {
+        return Ok(color.clone());
+    }
+
+    // 2. Инициализация клиента
+    let client = HTTP_CLIENT.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .expect("Failed to build HTTP client")
+    });
+
+    // 3. Выполнение запроса
+    let response = client.get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Ошибка сети: {}", e))?;
+
+    // Проверка размера контента (макс 2МБ)
+    if let Some(len) = response.content_length() {
+        if len > 2 * 1024 * 1024 {
+            return Ok("rgba(180, 160, 120, 0.9)".to_string());
+        }
+    }
+
+    let bytes = response.bytes().await.map_err(|e| format!("Ошибка загрузки: {}", e))?;
+
+    let img = image::load_from_memory(&bytes).map_err(|e| format!("Ошибка декодирования: {}", e))?;
     let img = img.thumbnail(10, 10);
     let rgb = img.to_rgb8();
 
@@ -928,35 +1281,99 @@ async fn get_accent_color(url: String) -> Result<String, String> {
         }
     }
 
-    if count == 0 {
-        return Ok("rgba(180, 160, 120, 0.9)".to_string());
-    }
+    let result_color = if count == 0 {
+        "rgba(180, 160, 120, 0.9)".to_string()
+    } else {
+        let factor = 0.8;
+        format!(
+            "rgba({}, {}, {}, 0.9)",
+            ((r / count) as f32 * factor) as u8,
+            ((g / count) as f32 * factor) as u8,
+            ((b / count) as f32 * factor) as u8
+        )
+    };
 
-    let factor = 0.8;
-    Ok(format!(
-        "rgba({}, {}, {}, 0.9)",
-        ((r / count) as f32 * factor) as u8,
-        ((g / count) as f32 * factor) as u8,
-        ((b / count) as f32 * factor) as u8
-    ))
+    // Сохранение в кэш
+    cache.lock().unwrap().insert(url, result_color.clone());
+    
+    Ok(result_color)
 }
 
 fn main() {
     println!("Запуск приложения Shikimore...");
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, Some(vec!["--minimized"])))
         .invoke_handler(tauri::generate_handler![
             search_anime,
+            search_anime_lite,
             search_manga,
             search_characters,
             search_people,
+            search_studios,
+            search_publishers,
+            get_genres,
             get_anime_by_id,
             get_manga_by_id,
             get_character_details,
-            get_accent_color
+            get_accent_color,
+            get_settings,
+            update_settings
         ])
-        .setup(|_app| {
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let app_handle = window.app_handle();
+                let settings = get_settings(app_handle.clone());
+                if settings.tray {
+                    window.hide().unwrap();
+                    api.prevent_close();
+                }
+            }
+        })
+        .setup(|app| {
             println!("Tauri приложение инициализировано");
+            
+            // Настройка системного трея
+            use tauri::tray::{TrayIconBuilder, MouseButton, MouseButtonState};
+            use tauri::menu::{Menu, MenuItem};
+
+            let quit_i = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>).unwrap();
+            let show_i = MenuItem::with_id(app, "show", "Показать", true, None::<&str>).unwrap();
+            let menu = Menu::with_items(app, &[&show_i, &quit_i]).unwrap();
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().unwrap().clone())
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    "show" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                    }
+                })
+                .build(app)
+                .unwrap();
+
             Ok(())
         })
         .run(tauri::generate_context!())

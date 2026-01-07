@@ -1,5 +1,13 @@
-import type { CharacterDetail, ContentType } from "../App";
+import type { CharacterDetail, ContentType, AppSettings } from "../App";
 import { useState } from "react";
+import { HorizontalScroll } from "./HorizontalScroll";
+import { BackIcon, ExternalLinkIcon } from "./icons";
+import { Badge } from "./common/Badge";
+import { LoadingSpinner } from "./common/LoadingSpinner";
+import { MarqueeText } from "./common/MarqueeText";
+import { RelatedCard } from "./RelatedCard";
+import { PersonCard } from "./PersonCard";
+import { translateRole } from "../utils/formatters";
 
 interface CharacterDetailViewProps {
   data: CharacterDetail | null;
@@ -7,6 +15,7 @@ interface CharacterDetailViewProps {
   error: string | null;
   onBack: () => void;
   onNavigate: (type: ContentType, id: number) => void;
+  settings: AppSettings | null;
 }
 
 export default function CharacterDetailView({ 
@@ -14,18 +23,19 @@ export default function CharacterDetailView({
   loading, 
   error, 
   onBack,
-  onNavigate
+  onNavigate,
+  settings
 }: CharacterDetailViewProps) {
   const [descExpanded, setDescExpanded] = useState(false);
 
   if (loading || !data) {
     return (
       <div className="detail-view">
-        <button className="detail-back-btn" onClick={onBack}>
-          ← Назад к списку
+        <button className="detail-back-btn" onClick={onBack} title="Назад к списку">
+          <BackIcon />
         </button>
         <div className="detail-loading">
-          <div className="loading-spinner" />
+          <LoadingSpinner />
           <p>Загрузка деталей персонажа...</p>
         </div>
       </div>
@@ -35,8 +45,8 @@ export default function CharacterDetailView({
   if (error) {
     return (
       <div className="detail-view">
-        <button className="detail-back-btn" onClick={onBack}>
-          ← Назад к списку
+        <button className="detail-back-btn" onClick={onBack} title="Назад к списку">
+          <BackIcon />
         </button>
         <div className="detail-error">
           <p>Ошибка загрузки: {error}</p>
@@ -45,10 +55,17 @@ export default function CharacterDetailView({
     );
   }
 
+  const prefLang = settings?.preferred_language || "russian";
+  const displayTitle = (prefLang === "russian" 
+    ? (data.russian || data.name) 
+    : (data.name || data.russian)) || "";
+  
+  const subTitle = (displayTitle === data.russian ? data.name : data.russian) || "";
+
   return (
     <div className="detail-view">
-      <button className="detail-back-btn" onClick={onBack}>
-        ← Назад к списку
+      <button className="detail-back-btn" onClick={onBack} title="Назад к списку">
+        <BackIcon />
       </button>
 
       <div className="detail-header">
@@ -63,9 +80,9 @@ export default function CharacterDetailView({
         <div className="detail-header-content">
           <div className="detail-title-row">
             <div className="detail-main-titles">
-              <h1 className="detail-title">{data.russian || data.name}</h1>
-              {data.russian && data.russian !== data.name && (
-                <h2 className="detail-russian">{data.name}</h2>
+              <h1 className="detail-title">{displayTitle}</h1>
+              {subTitle && (
+                <h2 className="detail-russian">{subTitle}</h2>
               )}
               {data.japanese && (
                 <div className="detail-english">{data.japanese}</div>
@@ -74,15 +91,11 @@ export default function CharacterDetailView({
           </div>
 
           <div className="detail-meta">
-            <span className="detail-badge">Персонаж</span>
+            <Badge variant="status">Персонаж</Badge>
             {data.url && (
               <a href={data.url} target="_blank" rel="noopener noreferrer" className="anime-link">
                 Открыть на Shikimori
-                <svg className="anime-link-icon" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M10 2H14V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M6 10L14 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M14 9V14H2V2H7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
+                <ExternalLinkIcon size={14} />
               </a>
             )}
           </div>
@@ -104,27 +117,29 @@ export default function CharacterDetailView({
                   dangerouslySetInnerHTML={{ __html: data.description_html || data.description }}
                   onClick={(e) => {
                     const target = e.target as HTMLElement;
-                    const spoiler = target.closest('.b-spoiler, .b-spoiler_block, .b-spoiler_inline');
-                    if (!spoiler) return;
+                    const link = target.closest('a');
+                    if (link && link.getAttribute('href')) {
+                      const href = link.getAttribute('href') || "";
+                      const charMatch = href.match(/\/characters\/(\d+)/);
+                      const animeMatch = href.match(/\/animes\/(\d+)/);
+                      const mangaMatch = href.match(/\/mangas\/(\d+)/);
+                      const personMatch = href.match(/\/people\/(\d+)/);
 
-                    // Если кликнули по заголовку (первый элемент или с классом label)
-                    const isLabel = target.classList.contains('b-spoiler_label') || 
-                                   target.tagName === 'LABEL' ||
-                                   spoiler.firstElementChild === target ||
-                                   spoiler.firstElementChild?.contains(target);
-                    
-                    if (isLabel) {
+                      if (charMatch) { e.preventDefault(); onNavigate("characters", parseInt(charMatch[1])); return; }
+                      if (animeMatch) { e.preventDefault(); onNavigate("anime", parseInt(animeMatch[1])); return; }
+                      if (mangaMatch) { e.preventDefault(); onNavigate("manga", parseInt(mangaMatch[1])); return; }
+                      if (personMatch) { e.preventDefault(); onNavigate("people", parseInt(personMatch[1])); return; }
+                    }
+
+                    const spoiler = target.closest('.b-spoiler, .b-spoiler_block, .b-spoiler_inline');
+                    if (spoiler && (target.classList.contains('b-spoiler_label') || target.tagName === 'LABEL' || spoiler.firstElementChild === target || spoiler.firstElementChild?.contains(target))) {
                       spoiler.classList.toggle('is-expanded');
-                      e.preventDefault();
-                      e.stopPropagation();
+                      e.preventDefault(); e.stopPropagation();
                     }
                   }}
                 />
                 {(data.description_html || data.description).length > 300 && (
-                  <button 
-                    className="description-more-btn"
-                    onClick={() => setDescExpanded(!descExpanded)}
-                  >
+                  <button className="description-more-btn" onClick={() => setDescExpanded(!descExpanded)}>
                     {descExpanded ? "Свернуть" : "Читать полностью..."}
                   </button>
                 )}
@@ -135,36 +150,71 @@ export default function CharacterDetailView({
       </div>
 
       <div className="detail-content">
+        {data.seyus && data.seyus.length > 0 && (
+          <div className="detail-section">
+            <h3 className="detail-section-title">Сейю</h3>
+            <HorizontalScroll className="detail-people">
+              {data.seyus.map((person) => (
+                <PersonCard 
+                  key={person.id}
+                  id={person.id}
+                  name={person.name}
+                  russian={person.russian}
+                  poster_url={person.poster_url}
+                  role="Сейю"
+                  onClick={() => onNavigate("people", person.id)}
+                />
+              ))}
+            </HorizontalScroll>
+          </div>
+        )}
+
         {data.character_roles && data.character_roles.length > 0 && (
           <div className="detail-section">
             <h3 className="detail-section-title">Участие в произведениях</h3>
-            <div className="roles-grid">
-              {data.character_roles.map((role) => {
-                const item = role.anime || role.manga;
-                if (!item) return null;
-                const type = role.anime ? "anime" : "manga";
-                
-                return (
-                  <div 
-                    key={`${type}-${item.id}`} 
-                    className="role-item clickable"
-                    onClick={() => onNavigate(type, item.id)}
-                  >
-                    <div className="role-poster-wrapper">
-                      {item.poster_url ? (
-                        <img src={item.poster_url} alt={item.russian || item.title} className="role-poster" />
-                      ) : (
-                        <div className="role-poster-placeholder">Нет фото</div>
-                      )}
+            <HorizontalScroll className="detail-related-horizontal">
+              {(() => {
+                const animeRoles = data.character_roles.filter(r => !!r.anime);
+                const mangaRoles = data.character_roles.filter(r => !!r.manga);
+                const result = [];
+
+                if (animeRoles.length > 0) {
+                  result.push(
+                    <div key="sep-anime" className="related-separator first-separator">
+                      <span className="related-separator-text">Аниме</span>
                     </div>
-                    <div className="role-info">
-                      <div className="role-title">{item.russian || item.title}</div>
-                      <div className="role-name">{role.roles_ru.join(", ")}</div>
+                  );
+                  result.push(...animeRoles.map(role => (
+                    <RelatedCard 
+                      key={`anime-${role.id}`}
+                      item={role.anime!}
+                      type="anime"
+                      roles={role.roles_ru.map(translateRole)}
+                      onClick={() => onNavigate("anime", role.anime!.id)}
+                    />
+                  )));
+                }
+
+                if (mangaRoles.length > 0) {
+                  result.push(
+                    <div key="sep-manga" className="related-separator">
+                      <span className="related-separator-text">Манга</span>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                  result.push(...mangaRoles.map(role => (
+                    <RelatedCard 
+                      key={`manga-${role.id}`}
+                      item={role.manga!}
+                      type="manga"
+                      roles={role.roles_ru.map(translateRole)}
+                      onClick={() => onNavigate("manga", role.manga!.id)}
+                    />
+                  )));
+                }
+
+                return result;
+              })()}
+            </HorizontalScroll>
           </div>
         )}
       </div>
