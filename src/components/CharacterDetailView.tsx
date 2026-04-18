@@ -1,5 +1,8 @@
-import type { CharacterDetail, ContentType } from "../App";
+import type { CharacterDetail, ContentType } from "../types";
 import { useState } from "react";
+import styles from "./CharacterDetailView.module.css";
+import InfoChip from "./InfoChip";
+import { getInfoChipLabel } from "../utils/badgeTexts";
 
 interface CharacterDetailViewProps {
   data: CharacterDetail | null;
@@ -90,10 +93,10 @@ export default function CharacterDetailView({
           <div className="detail-info-grid-header">
             {data.synonyms && data.synonyms.length > 0 && (
               <div className="detail-info-chips-group">
-                <div className="detail-info-chip">
-                  <span className="detail-label">Синонимы</span>
-                  <span className="detail-value">{data.synonyms.join(", ")}</span>
-                </div>
+                <InfoChip
+                  label={getInfoChipLabel("synonyms")}
+                  value={data.synonyms.join(", ")}
+                />
               </div>
             )}
 

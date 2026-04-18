@@ -1,0 +1,156 @@
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1rem 1rem;
+  margin-bottom: 0;
+  background: rgba(15, 15, 35, 0.4);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.header[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+
+.headerScrolled {
+  padding: 0.75rem 1.5rem;
+}
+
+.headerContent {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.headerScrolled .headerText {
+  transform: scale(0.95);
+}
+
+.windowControls {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding-top: 0.5rem;
+  z-index: 101;
+  position: relative;
+  -webkit-app-region: no-drag;
+  user-select: none;
+  flex-shrink: 0;
+  transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
+}
+
+.headerScrolled .windowControls {
+  padding-top: 0.75rem;
+}
+
+.windowControlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  position: relative;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.windowControlBtn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+}
+
+.windowControlBtn:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.windowControlClose:hover {
+  background: rgba(232, 17, 35, 0.9);
+  color: #fff;
+}
+
+.windowControlClose:active {
+  background: rgba(232, 17, 35, 1);
+}
+
+.windowControlBtn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.title {
+  font-family: 'SamuraiWarrior', sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: normal;
+  line-height: 1.1;
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  transition: font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.headerScrolled .title {
+  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  overflow: hidden;
+}
+
+.subtitle kbd {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-active);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}

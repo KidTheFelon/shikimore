@@ -7,13 +7,9 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    host: true,
     watch: {
       ignored: ["**/src-tauri/**"],
     },
   },
-  test: {
-    globals: true,
-    environment: "jsdom",
-    setupFiles: "./src/test/setup.ts",
-  },
-});
+  });

@@ -1,0 +1,131 @@
+/* Chip component styles */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* Size variants */
+.chip.sm {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+}
+
+.chip.md {
+  padding: 0.5rem 1rem;
+  font-size: 0.9rem;
+}
+
+.chip.lg {
+  padding: 0.75rem 1.25rem;
+  font-size: 1rem;
+}
+
+/* Clickable state */
+.chip.clickable {
+  cursor: pointer;
+}
+
+.chip.clickable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Variant styles */
+.chip.default {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.chip.default.clickable:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.chip.genre {
+  background: rgba(100, 108, 255, 0.08);
+  border: 1px solid rgba(100, 108, 255, 0.15);
+  color: var(--text-primary);
+}
+
+.chip.genre.clickable:hover {
+  background: rgba(100, 108, 255, 0.15);
+  border-color: var(--primary);
+}
+
+.chip.info {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  padding: 0.75rem 1rem;
+}
+
+.chip.info.clickable:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+}
+
+.chip.video {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: white;
+  background: rgba(0, 0, 0, 0.8);
+  border: none;
+  border-radius: var(--radius-sm);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.chip.video.clickable {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.chip.video.clickable:hover {
+  background: rgba(0, 0, 0, 0.9);
+  transform: none;
+  box-shadow: none;
+}
+
+/* Info chip specific styles */
+.chip.info .chipLabel {
+  color: var(--text-muted);
+  font-weight: 800;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.chip.info .chipValue {
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+
+.chip.info .chipValue .valueLink {
+  color: var(--primary);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.chip.info .chipValue .valueLink:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}

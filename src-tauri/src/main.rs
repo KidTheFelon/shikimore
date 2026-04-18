@@ -369,6 +369,13 @@ async fn search_anime(
         limit: Some(limit as i32),
         page: Some(page as i32),
         kind: kind.clone(),
+        censored: None,
+        genre: None,
+        order: None,
+        rating: None,
+        season: None,
+        studio: None,
+        status: None,
     };
     
     println!(">>> [Backend] Выполнение запроса к API...");
@@ -392,7 +399,7 @@ async fn search_anime(
             id: a.id,
             title: a.name,
             russian: a.russian,
-            url: a.url.or_else(|| Some(format!("https://shikimori.one/animes/{}", a.id))),
+            url: a.url.or_else(|| Some(format!("https://shikimori.io/animes/{}", a.id))),
             poster_url: a.poster.and_then(|p| p.main_url),
             score: a.score,
             kind: a.kind,
@@ -430,6 +437,11 @@ async fn search_manga(
         limit: Some(limit as i32),
         page: Some(page as i32),
         kind: kind.clone(),
+        censored: None,
+        genre: None,
+        order: None,
+        publisher: None,
+        status: None,
     };
     
     let mangas = client.mangas(params).await.map_err(ApiError::from)?;
@@ -440,7 +452,7 @@ async fn search_manga(
             id: m.id,
             title: m.name,
             russian: m.russian,
-            url: m.url.or_else(|| Some(format!("https://shikimori.one/mangas/{}", m.id))),
+            url: m.url.or_else(|| Some(format!("https://shikimori.io/mangas/{}", m.id))),
             poster_url: m.poster.and_then(|p| p.main_url),
             score: m.score,
             kind: m.kind,
@@ -472,6 +484,7 @@ async fn search_characters(
             page: None,
             limit: None,
             ids: Some(ids),
+            search: None,
         };
         
         let characters = client.characters(params).await.map_err(ApiError::from)?;
@@ -482,7 +495,7 @@ async fn search_characters(
                 id: c.id,
                 name: c.name,
                 russian: c.russian,
-                url: c.url.or_else(|| Some(format!("https://shikimori.one/characters/{}", c.id))),
+                url: c.url.or_else(|| Some(format!("https://shikimori.io/characters/{}", c.id))),
                 poster_url: c.poster.and_then(|p| p.main_url),
                 description: c.description,
                 is_anime: c.is_anime,
@@ -507,6 +520,7 @@ async fn search_characters(
         page: Some(page_val as i32),
         limit: Some(limit_val as i32),
         ids: None,
+        search: None,
     };
     
     let characters = client.characters(params).await.map_err(ApiError::from)?;
@@ -517,7 +531,7 @@ async fn search_characters(
             id: c.id,
             name: c.name,
             russian: c.russian,
-            url: c.url.or_else(|| Some(format!("https://shikimori.one/characters/{}", c.id))),
+            url: c.url.or_else(|| Some(format!("https://shikimori.io/characters/{}", c.id))),
             poster_url: c.poster.and_then(|p| p.main_url),
             description: c.description,
             is_anime: c.is_anime,
@@ -583,7 +597,7 @@ async fn search_people(
             id: p.id,
             name: p.name,
             russian: p.russian,
-            url: p.url.or_else(|| Some(format!("https://shikimori.one/people/{}", p.id))),
+            url: p.url.or_else(|| Some(format!("https://shikimori.io/people/{}", p.id))),
             poster_url: p.poster.and_then(|p| p.main_url),
             is_seyu: p.is_seyu,
             is_mangaka: p.is_mangaka,
@@ -651,7 +665,7 @@ fn convert_person_role(role: shikicrate::types::PersonRole) -> PersonRole {
             id: role.person.id,
             name: role.person.name,
             russian: role.person.russian,
-            url: Some(format!("https://shikimori.one/people/{}", role.person.id)),
+            url: Some(format!("https://shikimori.io/people/{}", role.person.id)),
             poster_url: role.person.poster.and_then(|p| p.main_url),
             is_seyu: None,
             is_mangaka: None,
@@ -677,7 +691,7 @@ fn convert_character_role(role: shikicrate::types::CharacterRole) -> CharacterRo
             id: char_data.id,
             name: char_data.name,
             russian: char_data.russian,
-            url: Some(format!("https://shikimori.one/characters/{}", char_data.id)),
+            url: Some(format!("https://shikimori.io/characters/{}", char_data.id)),
             poster_url: char_data.poster.and_then(|p| p.main_url),
             description: None,
             is_anime: None,
@@ -690,7 +704,7 @@ fn convert_character_role(role: shikicrate::types::CharacterRole) -> CharacterRo
 fn fix_url(url: Option<String>) -> Option<String> {
     url.map(|u| {
         if u.starts_with('/') {
-            format!("https://shikimori.one{}", u)
+            format!("https://shikimori.io{}", u)
         } else {
             u
         }
@@ -803,7 +817,7 @@ async fn get_anime_by_id(id: i64) -> Result<AnimeDetail, ApiError> {
         english: anime.english,
         japanese: anime.japanese,
         synonyms: anime.synonyms,
-        url: anime.url.or_else(|| Some(format!("https://shikimori.one/animes/{}", anime.id))),
+        url: anime.url.or_else(|| Some(format!("https://shikimori.io/animes/{}", anime.id))),
         poster_url: anime.poster.and_then(|p| p.main_url),
         description: anime.description,
         description_html: anime.description_html,
@@ -875,7 +889,7 @@ async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
         english: manga.english,
         japanese: manga.japanese,
         synonyms: manga.synonyms,
-        url: manga.url.or_else(|| Some(format!("https://shikimori.one/mangas/{}", manga.id))),
+        url: manga.url.or_else(|| Some(format!("https://shikimori.io/mangas/{}", manga.id))),
         poster_url: manga.poster.and_then(|p| p.main_url),
         description: manga.description,
         description_html: manga.description_html,
@@ -945,6 +959,7 @@ fn main() {
     println!("Запуск приложения Shikimore...");
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_http::init())
         .invoke_handler(tauri::generate_handler![
             search_anime,
             search_manga,

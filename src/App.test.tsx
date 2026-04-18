@@ -52,8 +52,8 @@ describe("App", () => {
       {
         id: 1,
         title: "Test Anime",
-        url: "https://shikimori.one/animes/1",
-        poster_url: "https://shikimori.one/poster.jpg",
+        url: "https://shikimori.io/animes/1",
+        poster_url: "https://shikimori.io/poster.jpg",
         description: "Test description",
         score: 8.5,
         kind: "tv",
@@ -102,7 +102,7 @@ describe("App", () => {
     await waitFor(() => {
       const poster = screen.getByAltText("Test Anime");
       expect(poster).toBeInTheDocument();
-      expect(poster).toHaveAttribute("src", "https://shikimori.one/poster.jpg");
+      expect(poster).toHaveAttribute("src", "https://shikimori.io/poster.jpg");
     });
   });
 
@@ -323,7 +323,7 @@ describe("App", () => {
 
     await userEvent.click(animeCards[0]);
     expect(mockWindowOpen).toHaveBeenCalledWith(
-      "https://shikimori.one/animes/1",
+      "https://shikimori.io/animes/1",
       "_blank",
       "noopener,noreferrer"
     );
@@ -341,7 +341,7 @@ describe("App", () => {
     await user.click(copyButton);
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
-      "https://shikimori.one/animes/1"
+      "https://shikimori.io/animes/1"
     );
   });
 

@@ -1,0 +1,158 @@
+/* Централизованные стили для marquee скроллинга */
+
+/* Базовые контейнеры для marquee */
+.marqueeContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.marqueeContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+/* Внутренние элементы с анимацией */
+.marqueeInner {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.marqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Анимация скроллинга */
+@keyframes marquee {
+  0%, 30% { 
+    transform: translateX(0); 
+  }
+  100% { 
+    transform: translateX(calc(-50% - 1rem)); 
+  }
+}
+
+/* Специализированные контейнеры */
+
+/* Для заголовков в ContentList */
+.animeTitleContainer {
+  width: 100%;
+  height: 1.35rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.animeTitleContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 80%, transparent 100%);
+}
+
+.animeMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.animeMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для role badges */
+.roleMarqueeContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.roleMarqueeContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.roleMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.roleMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для имён персонажей */
+.characterNameContainer {
+  width: 100%;
+  height: 1.25rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.characterNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+.characterMarqueeInner {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.characterMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для имён людей */
+.personNameContainer {
+  width: 100%;
+  height: 1.25rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.personNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+.personMarqueeInner {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.personMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Related cards titles */
+.relatedCardTitleContainer {
+  width: 100%;
+  height: auto;
+  overflow: hidden;
+  position: relative;
+}
+
+.relatedCardTitleContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.relatedCardTitleInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+  text-decoration: none;
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.relatedCardTitleInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}

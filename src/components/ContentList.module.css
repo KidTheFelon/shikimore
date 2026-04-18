@@ -1,0 +1,322 @@
+.animeList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.5rem;
+  margin-top: 2rem;
+}
+
+@media (min-width: 768px) {
+  .animeList {
+    gap: 2rem;
+  }
+}
+
+.animeItem {
+  background: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: var(--transition);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+}
+
+.animeItem:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-lg);
+  background: var(--bg-hover);
+  border-color: var(--primary);
+}
+
+.animeItem:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.2);
+}
+
+.animePosterContainer {
+  position: relative;
+  width: 100%;
+  height: 280px;
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(100, 108, 255, 0.1), rgba(255, 107, 157, 0.1));
+}
+
+.animePoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: var(--transition);
+}
+
+.animeItem:hover .animePoster {
+  transform: scale(1.05);
+}
+
+.animePosterPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(100, 108, 255, 0.15), rgba(255, 107, 157, 0.15));
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.animeContent {
+  padding: 0.75rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  overflow: hidden;
+}
+
+
+
+.animeHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 0.75rem;
+}
+
+.animeTitleRussian {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.3;
+  color: white;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.animeTitleEnglish {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.3;
+  color: var(--text-secondary);
+  font-weight: 500;
+  white-space: nowrap;
+  opacity: 0.8;
+}
+
+.animeLinkBtn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.animeLinkBtn:hover {
+  color: var(--primary);
+  background: var(--bg-hover);
+}
+
+.animeLinkBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+
+.animeMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.animeKind,
+.animeStatus,
+.animeScore {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.animeScore {
+  background: var(--primary);
+  color: white;
+}
+
+.animeEpisodes,
+.animeVolumes,
+.animeChapters {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0.5rem 0;
+}
+
+.animeDescription {
+  margin: 0;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  font-size: 0.9rem;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.copyLinkBtn {
+  padding: 0.5rem;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  flex-shrink: 0;
+}
+
+.copyLinkBtn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.copyLinkBtn:active {
+  transform: translateY(0);
+}
+
+.copyLinkBtn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.personRoles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.roleBadge {
+  padding: 0.25rem 0.5rem;
+  background: var(--accent);
+  color: white;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+/* Skeleton loading */
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--bg-secondary) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-loading 1.5s infinite;
+}
+
+@keyframes skeleton-loading {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.skeletonPoster {
+  width: 100%;
+  height: 200px;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
+}
+
+.skeletonText {
+  height: 1rem;
+  border-radius: var(--radius-sm);
+  margin-bottom: 0.5rem;
+}
+
+.skeletonText.short {
+  width: 60%;
+}
+
+.skeletonText.medium {
+  width: 80%;
+}
+
+.skeletonMeta {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.skeletonBadge {
+  width: 60px;
+  height: 1.5rem;
+  border-radius: var(--radius-sm);
+}
+
+/* Error and empty states */
+.errorContainer,
+.emptyContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.errorContainer svg,
+.emptyContainer svg {
+  width: 64px;
+  height: 64px;
+  margin-bottom: 1.5rem;
+  color: var(--text-muted);
+}
+
+.errorContent h3,
+.emptyContent h3 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.errorContent p,
+.emptyContent p {
+  font-size: 1rem;
+  color: var(--text-secondary);
+}
+
+.retryContainer {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.retryBtn {
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.retryBtn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.retryBtn:active {
+  transform: translateY(0);
+}

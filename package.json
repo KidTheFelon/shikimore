@@ -12,7 +12,7 @@
     "test:ui": "vitest --ui"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-shell": "^2.3.3",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
