@@ -26,3 +26,9 @@ dist-ssr
 # Tauri
 src-tauri/target
 src-tauri/Cargo.lock
+
+# Schema and API docs
+introspectionSchema (2).json
+schema_full.json
+schema.graphql
+shikimori_api_docs.md
