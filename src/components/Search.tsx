@@ -58,26 +58,26 @@ export default function Search({
   const getKindOptions = () => {
     if (contentType === "anime") {
       return [
-        { value: "", label: "All types" },
-        { value: "tv", label: "TV" },
-        { value: "movie", label: "Movie" },
+        { value: "", label: "Все типы" },
+        { value: "tv", label: "ТВ" },
+        { value: "movie", label: "Фильм" },
         { value: "ova", label: "OVA" },
         { value: "ona", label: "ONA" },
-        { value: "special", label: "Special" },
-        { value: "music", label: "Music" },
-        { value: "tv_13", label: "TV-13" },
-        { value: "tv_24", label: "TV-24" },
-        { value: "tv_48", label: "TV-48" },
+        { value: "special", label: "Спешл" },
+        { value: "music", label: "Музыка" },
+        { value: "tv_13", label: "ТВ-13" },
+        { value: "tv_24", label: "ТВ-24" },
+        { value: "tv_48", label: "ТВ-48" },
       ];
     } else if (contentType === "manga") {
       return [
-        { value: "", label: "All types" },
-        { value: "manga", label: "Manga" },
-        { value: "manhwa", label: "Manhwa" },
-        { value: "manhua", label: "Manhua" },
-        { value: "novel", label: "Light Novel" },
-        { value: "one_shot", label: "One Shot" },
-        { value: "doujin", label: "Doujinshi" },
+        { value: "", label: "Все типы" },
+        { value: "manga", label: "Манга" },
+        { value: "manhwa", label: "Манхва" },
+        { value: "manhua", label: "Маньхуа" },
+        { value: "novel", label: "Ранобэ" },
+        { value: "one_shot", label: "Ваншот" },
+        { value: "doujin", label: "Додзинси" },
       ];
     }
     return [];
@@ -90,25 +90,25 @@ export default function Search({
           className={`${styles.tabBtn} ${contentType === "anime" ? styles.active : ""}`}
           onClick={() => onContentTypeChange("anime")}
         >
-          Anime
+          Аниме
         </button>
         <button
           className={`${styles.tabBtn} ${contentType === "manga" ? styles.active : ""}`}
           onClick={() => onContentTypeChange("manga")}
         >
-          Manga
+          Манга
         </button>
         <button
           className={`${styles.tabBtn} ${contentType === "characters" ? styles.active : ""}`}
           onClick={() => onContentTypeChange("characters")}
         >
-          Characters
+          Персонажи
         </button>
         <button
           className={`${styles.tabBtn} ${contentType === "people" ? styles.active : ""}`}
           onClick={() => onContentTypeChange("people")}
         >
-          People
+          Люди
         </button>
       </div>
 
@@ -119,7 +119,7 @@ export default function Search({
             ref={searchInputRef}
             type="text"
             className={styles.searchInput}
-            placeholder={`Search ${contentType}...`}
+            placeholder={`Поиск ${contentType === "anime" ? "аниме" : contentType === "manga" ? "манги" : contentType === "characters" ? "персонажей" : "людей"}...`}
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             onFocus={onSearchFocus}
@@ -129,7 +129,7 @@ export default function Search({
         
         {showHistory && searchHistory.length > 0 && (
           <div className={styles.searchHistory}>
-            <div className={styles.historyHeader}>Recent searches</div>
+            <div className={styles.historyHeader}>Недавние поиски</div>
             {searchHistory.map((historyQuery, index) => (
               <div
                 key={index}
@@ -164,9 +164,9 @@ export default function Search({
           value={sortBy}
           onChange={(e) => onSortChange(e.target.value as SortOption)}
         >
-          <option value="relevance">Relevance</option>
-          <option value="score">Score</option>
-          <option value="title">Title</option>
+          <option value="relevance">Релевантность</option>
+          <option value="score">Рейтинг</option>
+          <option value="title">Название</option>
         </select>
       </div>
     </div>

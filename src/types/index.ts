@@ -2,6 +2,7 @@ export interface ApiError {
   kind: "validation" | "http" | "graphql" | "rate_limit" | "api" | "serialization" | "not_found";
   message: string;
   retry_after?: number;
+  details?: unknown;
 }
 
 export interface Date {
@@ -230,6 +231,24 @@ export interface CharacterDetail {
   description?: string;
   description_html?: string;
   character_roles: CharacterRoleDetail[];
+  voice_actors?: VoiceActor[];
+}
+
+// AniList types
+export interface VoiceActor {
+  id: number;
+  name: {
+    first?: string;
+    last?: string;
+    full: string;
+    native?: string;
+  };
+  language: string;
+  image: {
+    large?: string;
+    medium?: string;
+  };
+  url?: string;
 }
 
 export interface CharacterRoleDetail {

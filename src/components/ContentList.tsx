@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { ExternalLinkIcon, CopyIcon, ErrorIcon, EmptyIcon } from "./Icons";
+import { ErrorIcon, EmptyIcon } from "./Icons";
 import type { ContentItem } from "../types";
 import styles from "./ContentList.module.css";
 import ContentBadges from "./ContentBadges";
@@ -11,6 +11,7 @@ import {
   getItemDescription
 } from "../utils/contentHelpers";
 import { getStatusText, getPersonRoles } from "../utils/badgeTexts";
+import { getMarqueeParams } from "../utils/marquee";
 
 interface ContentListProps {
   items: ContentItem[];
@@ -18,7 +19,6 @@ interface ContentListProps {
   loadingMore: boolean;
   error: string | null;
   onContentClick: (item: ContentItem) => void;
-  onCopyLink: (e: React.MouseEvent, url: string) => void;
   cardColors: Record<number, string>;
   onImageLoad: (e: React.SyntheticEvent<HTMLImageElement, Event>, id: number) => void;
 }
@@ -29,7 +29,6 @@ export default function ContentList({
   loadingMore,
   error,
   onContentClick,
-  onCopyLink,
   cardColors,
   onImageLoad
 }: ContentListProps) {
@@ -66,7 +65,7 @@ export default function ContentList({
             />
           ) : (
             <div className={styles.animePosterPlaceholder}>
-              No Image
+              Нет изображения
             </div>
           )}
           
@@ -76,25 +75,33 @@ export default function ContentList({
         <div className={styles.animeContent}>
           <div className={styles.animeHeader}>
             <div className={styles.animeTitleContainer}>
-              {getItemRussian(item) && (
-                <h3 className={styles.animeTitleRussian}>{getItemRussian(item)}</h3>
-              )}
-              <h3 className={styles.animeTitleEnglish}>{getItemTitle(item)}</h3>
+              {getItemRussian(item) && (() => {
+                const russian = getItemRussian(item)!;
+                const params = getMarqueeParams(russian, 210, 7);
+                return (
+                  <div className={`animeTitleContainer ${params.isLong ? 'hasMarquee' : ''}`}>
+                    <div className={`animeMarqueeInner ${params.isLong ? 'isMarquee' : ''}`} style={params.style}>
+                      <h3 className={styles.animeTitleRussian}>{russian}</h3>
+                      {params.isLong && <h3 className={styles.animeTitleRussian}>&nbsp;</h3>}
+                      {params.isLong && <h3 className={styles.animeTitleRussian}>{russian}</h3>}
+                    </div>
+                  </div>
+                );
+              })()}
+              {(() => {
+                const title = getItemTitle(item);
+                const params = getMarqueeParams(title, 273, 7);
+                return (
+                  <div className={`animeTitleContainer ${params.isLong ? 'hasMarquee' : ''}`}>
+                    <div className={`animeMarqueeInner ${params.isLong ? 'isMarquee' : ''}`} style={params.style}>
+                      <h3 className={styles.animeTitleEnglish}>{title}</h3>
+                      {params.isLong && <h3 className={styles.animeTitleEnglish}>&nbsp;</h3>}
+                      {params.isLong && <h3 className={styles.animeTitleEnglish}>{title}</h3>}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
-            {itemType !== "characters" && itemType !== "people" && (
-              <button
-                className={styles.animeLinkBtn}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (item.url) {
-                    window.open(item.url, "_blank");
-                  }
-                }}
-                title="Open in Shikimori"
-              >
-                <ExternalLinkIcon />
-              </button>
-            )}
           </div>
           
           
@@ -126,16 +133,6 @@ export default function ContentList({
                 </p>
               )}
             </>
-          )}
-          
-          {item.url && (
-            <button
-              className={styles.copyLinkBtn}
-              onClick={(e) => onCopyLink(e, item.url!)}
-              title="Copy link"
-            >
-              <CopyIcon />
-            </button>
           )}
         </div>
       </div>
@@ -174,7 +171,7 @@ export default function ContentList({
       <div className={styles.errorContainer}>
         <ErrorIcon />
         <div className={styles.errorContent}>
-          <h3>Error loading content</h3>
+          <h3>Ошибка загрузки</h3>
           <p>{error}</p>
         </div>
       </div>
@@ -186,8 +183,8 @@ export default function ContentList({
       <div className={styles.emptyContainer}>
         <EmptyIcon />
         <div className={styles.emptyContent}>
-          <h3>No content found</h3>
-          <p>Try adjusting your search or filters</p>
+          <h3>Контент не найден</h3>
+          <p>Попробуйте изменить поиск или фильтры</p>
         </div>
       </div>
     );

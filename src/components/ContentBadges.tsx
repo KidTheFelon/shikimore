@@ -5,7 +5,8 @@ import {
   getItemScore,
   getItemKind,
   getAnimeEpisodes,
-  getAnimeEpisodesAired
+  getAnimeEpisodesAired,
+  getItemStatus
 } from "../utils/contentHelpers";
 import { getKindText } from "../utils/badgeTexts";
 
@@ -19,11 +20,15 @@ export default function ContentBadges({ item }: ContentBadgesProps) {
   const kind = getKindText(getItemKind(item));
   const episodes = getAnimeEpisodes(item);
   const episodesAired = getAnimeEpisodesAired(item);
+  const status = getItemStatus(item);
 
   // Don't show badges for characters and people
   if (itemType === "characters" || itemType === "people") {
     return null;
   }
+
+  // Calculate aired episodes: for released anime, aired = total; for ongoing, use actual aired if available
+  const displayedAired = status === "released" ? episodes : episodesAired;
 
   return (
     <>
@@ -33,18 +38,18 @@ export default function ContentBadges({ item }: ContentBadgesProps) {
           {score}
         </div>
       )}
-      
+
       {/* Kind badge */}
       {kind && (
         <div className={styles.contentCardKind}>
           {kind}
         </div>
       )}
-      
-      {/* Episodes badge */}
-      {episodes && (
+
+      {/* Episodes badge - only show if we have meaningful data */}
+      {episodes && displayedAired && (
         <div className={styles.contentCardEpisodes}>
-          {episodesAired || 0}/{episodes}
+          {displayedAired}/{episodes}
         </div>
       )}
     </>

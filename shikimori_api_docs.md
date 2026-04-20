@@ -7,9 +7,9 @@ Shikimori API has three versions:
 - **v1** (outdated)
 
 ## Base URLs
-- GraphQL: `https://shikimori.one/api/graphql`
-- v2 REST: `https://shikimori.one/api/v2/`
-- v1 REST: `https://shikimori.one/api/v1/`
+- GraphQL: `https://shikimori.io/api/graphql`
+- v2 REST: `https://shikimori.io/api/v2/`
+- v1 REST: `https://shikimori.io/api/v1/`
 
 ## Authentication
 - OAuth2 authentication required for most operations
@@ -328,7 +328,7 @@ query($ids: [ID!]) {
 - Ruby: https://github.com/iwdt/shikikit
 
 ## OAuth2 Guide
-https://shikimori.one/oauth
+https://shikimori.io/oauth
 
 ## Feedback
 - @morr on Shikimori

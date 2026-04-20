@@ -7,6 +7,7 @@ export const STATUS_TEXTS: Record<string, string> = {
 
 // Kind translations
 export const KIND_TEXTS: Record<string, string> = {
+  anime: "Аниме",
   tv: "ТВ",
   movie: "Фильм",
   ova: "OVA",
@@ -20,6 +21,7 @@ export const KIND_TEXTS: Record<string, string> = {
   manhwa: "Манхва",
   manhua: "Маньхуа",
   novel: "Ранобэ",
+  light_novel: "Ранобэ",
   one_shot: "Ваншот",
   doujin: "Додзинси",
 };
@@ -97,6 +99,55 @@ export const ROLE_TRANSLATIONS: Record<string, string> = {
   "Color Setting": "Работа с цветом",
 };
 
+// Relation kind translations
+export const RELATION_KIND_TEXTS: Record<string, string> = {
+  sequel: "Сиквел",
+  prequel: "Приквел",
+  alternative: "Альтернатива",
+  side_story: "Побочная история",
+  parent_story: "Основная история",
+  summary: "Рекап",
+  adaptation: "Адаптация",
+  spin_off: "Спин-офф",
+  character: "Персонаж",
+  other: "Другое",
+  full_story: "Полная история",
+  alternative_setting: "Альтернативный сеттинг",
+  alternative_version: "Альтернативная версия",
+};
+
+// Video kind translations
+export const VIDEO_KIND_TEXTS: Record<string, string> = {
+  pv: "Промо",
+  character_trailer: "Трейлер персонажа",
+  cm: "Реклама",
+  op: "Опенинг",
+  ed: "Эндинг",
+  op_ed_clip: "Оп/Эн клип",
+  clip: "Клип",
+  other: "Другое",
+  episode_preview: "Превью эпизода",
+};
+
+// External link translations
+export const EXTERNAL_LINK_TEXTS: Record<string, string> = {
+  official_site: "Официальный сайт",
+  wikipedia: "Википедия",
+  anime_news_network: "Anime News Network",
+  myanimelist: "MyAnimeList",
+  anime_db: "AniDB",
+  world_art: "WorldArt",
+  kinopoisk: "Кинопоиск",
+  kage_project: "Kage Project",
+  twitter: "Twitter",
+  kinopoisk_hd: "Кинопоиск HD",
+  shikimori: "Shikimori",
+  fandom: "Fandom",
+  youtube: "YouTube",
+  facebook: "Facebook",
+  instagram: "Instagram",
+};
+
 // Helper functions for InfoChip labels
 export const getInfoChipLabel = (key: keyof typeof INFO_CHIP_LABELS): string => {
   return INFO_CHIP_LABELS[key];
@@ -105,4 +156,19 @@ export const getInfoChipLabel = (key: keyof typeof INFO_CHIP_LABELS): string => 
 // Helper function for role translations
 export const translateRole = (role: string): string => {
   return ROLE_TRANSLATIONS[role] || role;
+};
+
+// Helper function for relation kind translations
+export const translateRelationKind = (kind: string): string => {
+  return RELATION_KIND_TEXTS[kind] || kind;
+};
+
+// Helper function for video kind translations
+export const translateVideoKind = (kind?: string): string | null => {
+  return kind ? VIDEO_KIND_TEXTS[kind] || kind : null;
+};
+
+// Helper function for external link translations
+export const translateExternalLink = (kind: string): string => {
+  return EXTERNAL_LINK_TEXTS[kind] || kind;
 };

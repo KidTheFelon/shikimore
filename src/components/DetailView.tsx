@@ -7,7 +7,7 @@ import InfoChip from "./InfoChip";
 import VideoKindChip from "./VideoKindChip";
 import HorizontalScroll from "./HorizontalScroll";
 import { getMarqueeParams } from "../utils/marquee";
-import { getInfoChipLabel, translateRole } from "../utils/badgeTexts";
+import { getInfoChipLabel, translateRole, translateRelationKind, translateVideoKind, translateExternalLink, STATUS_TEXTS, KIND_TEXTS } from "../utils/badgeTexts";
 
 interface DetailViewProps {
   data: AnimeDetail | MangaDetail | null;
@@ -119,18 +119,6 @@ export default function DetailView({
     return parts.length > 0 ? parts.join(".") : null;
   };
 
-  const formatSeason = (season?: string) => {
-    if (!season) return null;
-    const [q, year] = season.split('_');
-    const quarters: Record<string, string> = {
-      summer: "Лето",
-      winter: "Зима",
-      spring: "Весна",
-      fall: "Осень",
-    };
-    return `${quarters[q] || q} ${year || ""}`.trim();
-  };
-
   const formatRating = (rating?: string) => {
     const ratings: Record<string, string> = {
       g: "G",
@@ -144,65 +132,20 @@ export default function DetailView({
   };
 
   const formatStatus = (status?: string) => {
-    const statuses: Record<string, string> = {
-      anons: "Анонсировано",
-      ongoing: "Онгоинг",
-      released: "Выпущено",
-    };
-    return status ? statuses[status] || status : null;
+    return status ? STATUS_TEXTS[status] || status : null;
   };
 
   const formatKind = (kind?: string) => {
-    const kinds: Record<string, string> = {
-      tv: "TV",
-      movie: "Фильм",
-      ova: "OVA",
-      ona: "ONA",
-      special: "Спешл",
-      music: "Музыка",
-      manga: "Манга",
-      novel: "Новелла",
-      one_shot: "Ваншот",
-      doujin: "Додзинси",
-      manhwa: "Манхва",
-      manhua: "Маньхуа",
-    };
-    return kind ? kinds[kind] || kind.toUpperCase() : null;
+    return kind ? KIND_TEXTS[kind] || kind.toUpperCase() : null;
   };
 
   const formatRelationKind = (kind: string) => {
-    const relations: Record<string, string> = {
-      sequel: "Сиквел",
-      prequel: "Приквел",
-      alternative: "Альтернатива",
-      side_story: "Побочная история",
-      parent_story: "Основная история",
-      summary: "Рекап",
-      adaptation: "Адаптация",
-      spin_off: "Спин-офф",
-      character: "Персонаж",
-      other: "Другое",
-      full_story: "Полная история",
-      alternative_setting: "Альтернативный сеттинг",
-      alternative_version: "Альтернативная версия",
-    };
-    return relations[kind] || kind;
+    return translateRelationKind(kind);
   };
 
 
   const formatVideoKind = (kind?: string) => {
-    const kinds: Record<string, string> = {
-      pv: "Промо",
-      character_trailer: "Трейлер персонажа",
-      cm: "Реклама",
-      op: "Опенинг",
-      ed: "Эндинг",
-      op_ed_clip: "Оп/Эн клип",
-      clip: "Клип",
-      other: "Другое",
-      episode_preview: "Превью эпизода",
-    };
-    return kind ? kinds[kind] || kind : null;
+    return translateVideoKind(kind);
   };
 
   const getVideoKindColor = (kind?: string) => {
@@ -221,25 +164,7 @@ export default function DetailView({
   };
 
   const formatExternalLink = (kind: string, url: string) => {
-    const names: Record<string, { label: string; icon?: React.ReactNode }> = {
-      official_site: { label: "Официальный сайт", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14L21 3"/></svg> },
-      wikipedia: { label: "Википедия" },
-      anime_news_network: { label: "Anime News Network" },
-      myanimelist: { label: "MyAnimeList" },
-      anime_db: { label: "AniDB" },
-      world_art: { label: "WorldArt" },
-      kinopoisk: { label: "Кинопоиск" },
-      kage_project: { label: "Kage Project" },
-      twitter: { label: "Twitter", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 4s-.7 2.1-2 3.4c1.6 10-9.4 17.3-18 11.6 2.2.1 4.4-.6 6-2C3 15.5.5 9.6 3 5c2.2 2.6 5.6 4.1 9 4-.9-4.2 4-6.6 7-3.8 1.1 0 3-1.2 3-1.2z"/></svg> },
-      kinopoisk_hd: { label: "Кинопоиск HD" },
-      shikimori: { label: "Shikimori" },
-      fandom: { label: "Fandom" },
-      youtube: { label: "YouTube", icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg> },
-      facebook: { label: "Facebook" },
-      instagram: { label: "Instagram" },
-    };
-
-    const linkInfo = names[kind] || { label: kind };
+    const linkInfo = { label: translateExternalLink(kind) };
     let faviconUrl = "";
     try {
       const domain = new URL(url).hostname;
@@ -251,9 +176,7 @@ export default function DetailView({
     return (
       <>
         <span className={styles.linkIcon}>
-          {linkInfo.icon ? (
-            linkInfo.icon
-          ) : faviconUrl ? (
+          {faviconUrl ? (
             <img 
               src={faviconUrl} 
               alt="" 
@@ -448,11 +371,12 @@ export default function DetailView({
             {isAnime && animeData?.rating && (
               <span className={styles.detailBadge}>{formatRating(animeData.rating)}</span>
             )}
-            {isAnime && (animeData?.episodes_aired !== undefined || animeData?.episodes) && (
+            {isAnime && animeData?.episodes && (
               <span className={styles.detailInfo}>
-                {typeof animeData?.episodes_aired === 'number'
-                  ? `${animeData.episodes_aired} / ${animeData.episodes || "?"} эп.` 
-                  : `${animeData?.episodes || "?"} эп.`}
+                {(() => {
+                  const aired = animeData?.status === "released" ? animeData.episodes : animeData?.episodes_aired;
+                  return aired ? `${aired} / ${animeData.episodes} эп.` : `${animeData.episodes} эп.`;
+                })()}
               </span>
             )}
             {!isAnime && mangaData?.volumes && (

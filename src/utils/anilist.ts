@@ -1,0 +1,159 @@
+import type { VoiceActor } from "../types";
+
+const ANILIST_API = "https://graphql.anilist.co";
+
+export function translateLanguage(language: string): string {
+  const normalized = language.charAt(0).toUpperCase() + language.slice(1).toLowerCase();
+  const translations: Record<string, string> = {
+    "Japanese": "Японский",
+    "English": "Английский",
+    "Korean": "Корейский",
+    "Spanish": "Испанский",
+    "French": "Французский",
+    "German": "Немецкий",
+    "Portuguese": "Португальский",
+    "Italian": "Итальянский",
+    "Chinese": "Китайский",
+    "Thai": "Тайский",
+    "Tagalog": "Тагальский",
+    "Vietnamese": "Вьетнамский",
+    "Hindi": "Хинди",
+    "Arabic": "Арабский",
+    "Turkish": "Турецкий",
+    "Polish": "Польский",
+    "Russian": "Русский",
+  };
+  return translations[normalized] || language;
+}
+
+export interface AniListCharacterResponse {
+  data: {
+    Character: {
+      id: number;
+      name: {
+        first?: string;
+        last?: string;
+        full: string;
+        native?: string;
+      };
+      media: {
+        edges: Array<{
+          node: {
+            id: number;
+            title: {
+              romaji: string;
+              english?: string;
+              native?: string;
+            };
+            type: "ANIME" | "MANGA";
+          };
+          voiceActors: Array<{
+            id: number;
+            name: {
+              first?: string;
+              last?: string;
+              full: string;
+              native?: string;
+            };
+            language: string;
+            image: {
+              large?: string;
+              medium?: string;
+            };
+            siteUrl?: string;
+          }>;
+        }>;
+      };
+    };
+  };
+}
+
+export async function fetchVoiceActors(characterName: string): Promise<VoiceActor[]> {
+  const query = `
+    query ($search: String) {
+      Character(search: $search) {
+        id
+        name {
+          first
+          last
+          full
+          native
+        }
+        media {
+          edges {
+            node {
+              id
+              title {
+                romaji
+                english
+                native
+              }
+              type
+            }
+            voiceActors {
+              id
+              name {
+                first
+                last
+                full
+                native
+              }
+              language
+              image {
+                large
+                medium
+              }
+              siteUrl
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(ANILIST_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        variables: { search: characterName },
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`AniList API error: ${response.status}`);
+    }
+
+    const json: AniListCharacterResponse = await response.json();
+    
+    if (!json.data?.Character) {
+      return [];
+    }
+    
+    // Собираем всех уникальных сейю
+    const voiceActorsMap = new Map<number, VoiceActor>();
+    
+    json.data.Character.media.edges.forEach(edge => {
+      edge.voiceActors.forEach(va => {
+        if (!voiceActorsMap.has(va.id)) {
+          voiceActorsMap.set(va.id, {
+            id: va.id,
+            name: va.name,
+            language: va.language,
+            image: va.image,
+            url: va.siteUrl,
+          });
+        }
+      });
+    });
+
+    return Array.from(voiceActorsMap.values());
+  } catch (error) {
+    console.error("Error fetching voice actors from AniList:", error);
+    return [];
+  }
+}

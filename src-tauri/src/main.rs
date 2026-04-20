@@ -12,6 +12,7 @@ struct ApiError {
     kind: String,
     message: String,
     retry_after: Option<u64>,
+    details: Option<serde_json::Value>,
 }
 
 impl std::fmt::Display for ApiError {
@@ -29,31 +30,50 @@ impl From<ShikicrateError> for ApiError {
                 kind: "validation".to_string(),
                 message: msg,
                 retry_after: None,
+                details: None,
             },
-            ShikicrateError::Http(e) => ApiError {
-                kind: "http".to_string(),
-                message: format!("Ошибка сети: {}", e),
-                retry_after: None,
-            },
-            ShikicrateError::GraphQL { message, .. } => ApiError {
+            ShikicrateError::Http(e) => {
+                let mut details = serde_json::json!({});
+                if let Some(status) = e.status() {
+                    details["status"] = serde_json::json!(status.as_u16());
+                }
+                if let Some(url) = e.url() {
+                    details["url"] = serde_json::json!(url.to_string());
+                }
+                ApiError {
+                    kind: "http".to_string(),
+                    message: format!("Ошибка сети: {}", e),
+                    retry_after: None,
+                    details: if details.as_object().map(|o| !o.is_empty()).unwrap_or(false) {
+                        Some(details)
+                    } else {
+                        None
+                    },
+                }
+            }
+            ShikicrateError::GraphQL { message, errors } => ApiError {
                 kind: "graphql".to_string(),
                 message,
                 retry_after: None,
+                details: errors,
             },
             ShikicrateError::RateLimit { message, retry_after } => ApiError {
                 kind: "rate_limit".to_string(),
                 message,
                 retry_after,
+                details: Some(serde_json::json!({ "retry_after": retry_after })),
             },
             ShikicrateError::Api { status, message } => ApiError {
                 kind: "api".to_string(),
                 message: format!("HTTP {}: {}", status, message),
                 retry_after: None,
+                details: Some(serde_json::json!({ "status": status })),
             },
             ShikicrateError::Serialization(e) => ApiError {
                 kind: "serialization".to_string(),
                 message: format!("Ошибка сериализации: {}", e),
                 retry_after: None,
+                details: Some(serde_json::json!({ "classification": format!("{:?}", e.classify()) })),
             },
         }
     }
@@ -343,6 +363,7 @@ async fn search_anime(
     page: Option<u32>,
     limit: Option<u32>,
     kind: Option<String>,
+    order: Option<String>,
 ) -> Result<SearchResult<Anime>, ApiError> {
     println!(">>> [Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}", query, page, limit, kind);
     
@@ -371,7 +392,7 @@ async fn search_anime(
         kind: kind.clone(),
         censored: None,
         genre: None,
-        order: None,
+        order: order.clone(),
         rating: None,
         season: None,
         studio: None,
@@ -423,6 +444,7 @@ async fn search_manga(
     page: Option<u32>,
     limit: Option<u32>,
     kind: Option<String>,
+    order: Option<String>,
 ) -> Result<SearchResult<Manga>, ApiError> {
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
@@ -439,7 +461,7 @@ async fn search_manga(
         kind: kind.clone(),
         censored: None,
         genre: None,
-        order: None,
+        order: order.clone(),
         publisher: None,
         status: None,
     };
@@ -557,6 +579,7 @@ async fn get_character_details(id: i64) -> Result<CharacterDetail, ApiError> {
             kind: "not_found".to_string(),
             message: "Персонаж не найден".to_string(),
             retry_after: None,
+            details: Some(serde_json::json!({ "id": id })),
         })?;
         
     Ok(CharacterDetail {
@@ -799,6 +822,7 @@ async fn get_anime_by_id(id: i64) -> Result<AnimeDetail, ApiError> {
                 kind: "not_found".to_string(),
                 message: format!("Аниме с ID {} не найдено.", id),
                 retry_after: None,
+                details: Some(serde_json::json!({ "id": id })),
             });
         }
         Err(e) => {
@@ -871,6 +895,7 @@ async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
                 kind: "not_found".to_string(),
                 message: format!("Манга с ID {} не найдена.", id),
                 retry_after: None,
+                details: Some(serde_json::json!({ "id": id })),
             });
         }
         Err(e) => {

@@ -143,15 +143,32 @@ function App() {
   const handleApiError = (err: unknown): string => {
     if (typeof err === "object" && err !== null && "kind" in err) {
       const apiError = err as ApiError;
+      let message = apiError.message;
+
+      // Добавляем специфичную информацию для разных типов ошибок
       if (apiError.kind === "rate_limit" && apiError.retry_after) {
-        return `${apiError.message} (retry after ${apiError.retry_after} sec)`;
+        message += ` (Повторить через ${apiError.retry_after} сек)`;
+      } else if (apiError.kind === "graphql" && apiError.details) {
+        // Можно добавить логирование деталей для отладки
+        console.debug("GraphQL error details:", apiError.details);
+      } else if (apiError.kind === "http" && apiError.details) {
+        const details = apiError.details as { status?: number; url?: string };
+        if (details.status) {
+          message += ` (Статус: ${details.status})`;
+        }
+      } else if (apiError.kind === "api" && apiError.details) {
+        const details = apiError.details as { status?: number };
+        if (details.status) {
+          message += ` (Статус: ${details.status})`;
+        }
       }
-      return apiError.message;
+
+      return message;
     }
     if (err instanceof Error) {
       return err.message;
     }
-    return "Error loading content";
+    return "Ошибка загрузки контента";
   };
 
   // Content fetching
@@ -172,12 +189,20 @@ function App() {
     try {
       let result: SearchResult<ContentItem>;
       
+      // Map sortBy to API order values
+      const getOrderValue = () => {
+        if (sortBy === "score") return "ranked";
+        if (sortBy === "title") return "name";
+        return "id"; // relevance = default sort by id
+      };
+      
       if (type === "anime") {
         result = await invoke<SearchResult<any>>("search_anime", {
           query,
           page,
           limit,
           kind: kind || undefined,
+          order: getOrderValue(),
         });
       } else if (type === "manga") {
         result = await invoke<SearchResult<any>>("search_manga", {
@@ -185,6 +210,7 @@ function App() {
           page,
           limit,
           kind: kind || undefined,
+          order: getOrderValue(),
         });
       } else if (type === "characters") {
         result = await invoke<SearchResult<any>>("search_characters", {
@@ -199,25 +225,10 @@ function App() {
         });
       }
       
-      let sorted = [...result.items];
-      if (sortBy === "score") {
-        sorted.sort((a, b) => {
-          const scoreA = "score" in a ? (a.score || 0) : 0;
-          const scoreB = "score" in b ? (b.score || 0) : 0;
-          return scoreB - scoreA;
-        });
-      } else if (sortBy === "title") {
-        sorted.sort((a, b) => {
-          const titleA = "title" in a ? a.title : "name" in a ? a.name : "";
-          const titleB = "title" in b ? b.title : "name" in b ? b.name : "";
-          return titleA.localeCompare(titleB);
-        });
-      }
-      
       if (append) {
-        setContentList(prev => [...prev, ...sorted]);
+        setContentList(prev => [...prev, ...result.items]);
       } else {
-        setContentList(sorted);
+        setContentList(result.items);
       }
       
       setHasMore(result.items.length === limit);
@@ -260,7 +271,7 @@ function App() {
         window.clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [searchQuery, kindFilter, contentType, fetchContent, searchHistory]);
+  }, [searchQuery, kindFilter, sortBy, contentType, fetchContent, searchHistory]);
 
   // Lazy pagination
   useEffect(() => {
@@ -391,17 +402,6 @@ function App() {
       if (url) {
         openUrl(url);
       }
-    }
-  };
-
-  const handleCopyLink = async (e: React.MouseEvent, url: string) => {
-    e.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(url);
-      showToast("Link copied", "success");
-    } catch (err) {
-      showToast("Failed to copy link", "error");
-      console.error("Failed to copy:", err);
     }
   };
 
@@ -539,7 +539,6 @@ function App() {
             loadingMore={loadingMore}
             error={error}
             onContentClick={handleContentClick}
-            onCopyLink={handleCopyLink}
             cardColors={cardColors}
             onImageLoad={handleImageLoad}
           />

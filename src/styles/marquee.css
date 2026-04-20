@@ -31,7 +31,7 @@
     transform: translateX(0); 
   }
   100% { 
-    transform: translateX(calc(-50% - 1rem)); 
+    transform: translateX(-50%); 
   }
 }
 
@@ -154,5 +154,51 @@
 }
 
 .relatedCardTitleInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для badge языка */
+.languageMarqueeContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.languageMarqueeContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.languageMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.languageMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для названий ролей (аниме/манга) */
+.roleNameContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.roleNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.roleMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.roleMarqueeInner.isMarquee {
   animation: marquee var(--marquee-duration, 5s) linear infinite;
 }
