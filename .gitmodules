@@ -1,0 +1,3 @@
+[submodule "shikimore"]
+	path = shikimore
+	url = https://github.com/KidTheFelon/shikimore
