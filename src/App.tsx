@@ -54,10 +54,6 @@ function App() {
 
   // Load saved search and history
   useEffect(() => {
-    const saved = localStorage.getItem("shikimore_last_search");
-    if (saved) {
-      setSearchQuery(saved);
-    }
     const history = localStorage.getItem("shikimore_search_history");
     if (history) {
       try {
@@ -66,6 +62,8 @@ function App() {
         // ignore
       }
     }
+    // Load initial content on startup
+    fetchContent(contentType, "", 1, kindFilter, false);
   }, []);
 
   // Save search
@@ -322,9 +320,7 @@ function App() {
     setCurrentPage(1);
     setHasMore(true);
     setKindFilter("");
-    if (newType === "characters") {
-      fetchContent(newType, "", 1, "", false);
-    }
+    fetchContent(newType, "", 1, "", false);
   };
 
   const handleKindChange = (value: string) => {
