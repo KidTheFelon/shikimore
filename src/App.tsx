@@ -4,6 +4,7 @@ import { open as openUrl } from "@tauri-apps/plugin-shell";
 import Header from "./components/Header";
 import Search from "./components/Search";
 import ContentList from "./components/ContentList";
+import BottomBar from "./components/BottomBar";
 import DetailView from "./components/DetailView";
 import CharacterDetailView from "./components/CharacterDetailView";
 import { ToastContainer } from "./components/Toast";
@@ -46,6 +47,10 @@ function App() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [cardColors, setCardColors] = useState<Record<number, string>>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
+  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null);
+  const [animationPhase, setAnimationPhase] = useState<'exiting' | 'entering' | 'none'>('none');
+  const [filterAnimationKey, setFilterAnimationKey] = useState(0);
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -65,6 +70,28 @@ function App() {
     // Load initial content on startup
     fetchContent(contentType, "", 1, kindFilter, false);
   }, []);
+
+  // Reset animation phase after content loads
+  useEffect(() => {
+    if (animationPhase === 'entering' && !loading && contentList.length > 0) {
+      const timer = setTimeout(() => {
+        setAnimationPhase('none');
+        setSlideDirection(null);
+        setExitDirection(null);
+      }, 400); // Match slideIn animation duration
+      return () => clearTimeout(timer);
+    }
+  }, [animationPhase, loading, contentList.length]);
+
+  // Reset filter animation after content loads
+  useEffect(() => {
+    if (filterAnimationKey > 0 && !loading && contentList.length > 0) {
+      const timer = setTimeout(() => {
+        setFilterAnimationKey(0);
+      }, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [filterAnimationKey, loading, contentList.length]);
 
   // Save search
   useEffect(() => {
@@ -252,15 +279,13 @@ function App() {
     }
 
     debounceTimerRef.current = window.setTimeout(() => {
-      if (searchQuery || contentType === "characters") {
-        setCurrentPage(1);
-        setHasMore(true);
-        fetchContent(contentType, searchQuery, 1, kindFilter, false);
-        if (searchQuery && !searchHistory.includes(searchQuery)) {
-          const newHistory = [searchQuery, ...searchHistory.filter((q) => q !== searchQuery)].slice(0, 5);
-          setSearchHistory(newHistory);
-          localStorage.setItem("shikimore_search_history", JSON.stringify(newHistory));
-        }
+      setCurrentPage(1);
+      setHasMore(true);
+      fetchContent(contentType, searchQuery, 1, kindFilter, false);
+      if (searchQuery && !searchHistory.includes(searchQuery)) {
+        const newHistory = [searchQuery, ...searchHistory.filter((q) => q !== searchQuery)].slice(0, 5);
+        setSearchHistory(newHistory);
+        localStorage.setItem("shikimore_search_history", JSON.stringify(newHistory));
       }
     }, 400);
 
@@ -315,15 +340,30 @@ function App() {
   };
 
   const handleContentTypeChange = (newType: ContentType) => {
-    setContentType(newType);
-    setContentList([]);
-    setCurrentPage(1);
-    setHasMore(true);
-    setKindFilter("");
-    fetchContent(newType, "", 1, "", false);
+    const typeOrder: ContentType[] = ["anime", "manga"];
+    const currentIndex = typeOrder.indexOf(contentType);
+    const newIndex = typeOrder.indexOf(newType);
+    const enterDirection = newIndex > currentIndex ? "right" : "left";
+    const exitDir = newIndex > currentIndex ? "left" : "right"; // Противоположное направление для выхода
+    
+    setSlideDirection(enterDirection);
+    setExitDirection(exitDir);
+    setAnimationPhase('exiting');
+    
+    // После анимации выхода очищаем контент и начинаем загрузку
+    setTimeout(() => {
+      setContentType(newType);
+      setContentList([]);
+      setCurrentPage(1);
+      setHasMore(true);
+      setKindFilter("");
+      setAnimationPhase('entering');
+      fetchContent(newType, "", 1, "", false);
+    }, 300); // Длительность анимации выхода
   };
 
   const handleKindChange = (value: string) => {
+    setFilterAnimationKey(prev => prev + 1);
     setKindFilter(value);
     setCurrentPage(1);
     setHasMore(true);
@@ -331,6 +371,7 @@ function App() {
   };
 
   const handleSortChange = (value: SortOption) => {
+    setFilterAnimationKey(prev => prev + 1);
     setSortBy(value);
     setCurrentPage(1);
     setHasMore(true);
@@ -341,6 +382,10 @@ function App() {
     setSearchQuery(query);
     setShowHistory(false);
     searchInputRef.current?.blur();
+  };
+
+  const handleHistoryClose = () => {
+    setShowHistory(false);
   };
 
   const handleContentClick = (item: ContentItem) => {
@@ -517,7 +562,6 @@ function App() {
             query={searchQuery}
             onQueryChange={handleSearchChange}
             contentType={contentType}
-            onContentTypeChange={handleContentTypeChange}
             kindFilter={kindFilter}
             onKindChange={handleKindChange}
             sortBy={sortBy}
@@ -527,6 +571,7 @@ function App() {
             onHistorySelect={handleHistorySelect}
             onSearchFocus={handleSearchFocus}
             onSearchKeyDown={handleSearchKeyDown}
+            onHistoryClose={handleHistoryClose}
           />
 
           <ContentList
@@ -537,6 +582,16 @@ function App() {
             onContentClick={handleContentClick}
             cardColors={cardColors}
             onImageLoad={handleImageLoad}
+            blurred={showHistory}
+            slideDirection={slideDirection}
+            exitDirection={exitDirection}
+            animationPhase={animationPhase}
+            filterAnimationKey={filterAnimationKey}
+          />
+
+          <BottomBar
+            contentType={contentType}
+            onContentTypeChange={handleContentTypeChange}
           />
 
           {error && (

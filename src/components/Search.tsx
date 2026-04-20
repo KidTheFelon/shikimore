@@ -1,5 +1,5 @@
-import { useRef, useEffect } from "react";
-import { SearchIcon } from "./Icons";
+import { useRef, useEffect, useState } from "react";
+import { SearchIcon, FilterIcon } from "./Icons";
 import type { ContentType, SortOption } from "../types";
 import styles from "./Search.module.css";
 
@@ -7,7 +7,6 @@ interface SearchProps {
   query: string;
   onQueryChange: (value: string) => void;
   contentType: ContentType;
-  onContentTypeChange: (type: ContentType) => void;
   kindFilter: string;
   onKindChange: (value: string) => void;
   sortBy: SortOption;
@@ -17,13 +16,13 @@ interface SearchProps {
   onHistorySelect: (query: string) => void;
   onSearchFocus: () => void;
   onSearchKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onHistoryClose?: () => void;
 }
 
 export default function Search({
   query,
   onQueryChange,
   contentType,
-  onContentTypeChange,
   kindFilter,
   onKindChange,
   sortBy,
@@ -32,9 +31,13 @@ export default function Search({
   showHistory,
   onHistorySelect,
   onSearchFocus,
-  onSearchKeyDown
+  onSearchKeyDown,
+  onHistoryClose
 }: SearchProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [isDropdownClosing, setIsDropdownClosing] = useState(false);
+  const [isHistoryClosing, setIsHistoryClosing] = useState(false);
 
   // Close history when clicking outside
   useEffect(() => {
@@ -42,10 +45,15 @@ export default function Search({
       const target = e.target as HTMLElement;
       if (
         showHistory &&
+        !isHistoryClosing &&
         !target.closest(`.${styles.searchInputWrapper}`) &&
         !target.closest(`.${styles.searchHistory}`)
       ) {
-        // This will be handled by parent component
+        setIsHistoryClosing(true);
+        setTimeout(() => {
+          setIsHistoryClosing(false);
+          onHistoryClose?.();
+        }, 200);
       }
     };
 
@@ -53,7 +61,49 @@ export default function Search({
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [showHistory]);
+  }, [showHistory, isHistoryClosing, onHistoryClose]);
+
+  // Close filter dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        showFilterDropdown &&
+        !isDropdownClosing &&
+        !target.closest(`.${styles.filterDropdownWrapper}`) &&
+        !target.closest(`.${styles.filterBtn}`)
+      ) {
+        setIsDropdownClosing(true);
+        setTimeout(() => {
+          setShowFilterDropdown(false);
+          setIsDropdownClosing(false);
+        }, 200);
+      }
+    };
+
+    if (showFilterDropdown) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [showFilterDropdown, isDropdownClosing]);
+
+  // Close filter dropdown on scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (showFilterDropdown && !isDropdownClosing) {
+        setIsDropdownClosing(true);
+        setTimeout(() => {
+          setShowFilterDropdown(false);
+          setIsDropdownClosing(false);
+        }, 200);
+      }
+    };
+
+    if (showFilterDropdown) {
+      window.addEventListener("scroll", handleScroll, { passive: true });
+      return () => window.removeEventListener("scroll", handleScroll);
+    }
+  }, [showFilterDropdown, isDropdownClosing]);
 
   const getKindOptions = () => {
     if (contentType === "anime") {
@@ -85,33 +135,6 @@ export default function Search({
 
   return (
     <div className={styles.searchSection}>
-      <div className={styles.contentTypeTabs}>
-        <button
-          className={`${styles.tabBtn} ${contentType === "anime" ? styles.active : ""}`}
-          onClick={() => onContentTypeChange("anime")}
-        >
-          Аниме
-        </button>
-        <button
-          className={`${styles.tabBtn} ${contentType === "manga" ? styles.active : ""}`}
-          onClick={() => onContentTypeChange("manga")}
-        >
-          Манга
-        </button>
-        <button
-          className={`${styles.tabBtn} ${contentType === "characters" ? styles.active : ""}`}
-          onClick={() => onContentTypeChange("characters")}
-        >
-          Персонажи
-        </button>
-        <button
-          className={`${styles.tabBtn} ${contentType === "people" ? styles.active : ""}`}
-          onClick={() => onContentTypeChange("people")}
-        >
-          Люди
-        </button>
-      </div>
-
       <div className={styles.searchInputWrapper}>
         <div className={styles.searchInputContainer}>
           <SearchIcon size={18} />
@@ -125,16 +148,96 @@ export default function Search({
             onFocus={onSearchFocus}
             onKeyDown={onSearchKeyDown}
           />
+          <button
+            className={styles.filterBtn}
+            onClick={() => {
+              if (showFilterDropdown) {
+                setIsDropdownClosing(true);
+                setTimeout(() => {
+                  setShowFilterDropdown(false);
+                  setIsDropdownClosing(false);
+                }, 200);
+              } else {
+                setShowFilterDropdown(true);
+              }
+            }}
+          >
+            <FilterIcon size={18} />
+          </button>
         </div>
-        
+
+        {showFilterDropdown && (
+          <div className={styles.filterDropdownWrapper}>
+            <div className={`${styles.filterDropdown} ${isDropdownClosing ? styles.closing : ""}`}>
+              {contentType !== "characters" && contentType !== "people" && (
+                <>
+                  <div className={styles.dropdownSection}>
+                    <div className={styles.dropdownHeader}>Тип</div>
+                    <div className={styles.dropdownOptions}>
+                      {getKindOptions().map((option) => (
+                        <button
+                          key={option.value}
+                          className={`${styles.dropdownOption} ${kindFilter === option.value ? styles.dropdownOptionActive : ""}`}
+                          onClick={() => {
+                            onKindChange(option.value);
+                            setIsDropdownClosing(true);
+                            setTimeout(() => {
+                              setShowFilterDropdown(false);
+                              setIsDropdownClosing(false);
+                            }, 200);
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.dropdownDivider} />
+                </>
+              )}
+              <div className={styles.dropdownSection}>
+                <div className={styles.dropdownHeader}>Сортировка</div>
+                <div className={styles.dropdownOptions}>
+                  {[
+                    { value: "relevance", label: "Релевантность" },
+                    { value: "score", label: "Рейтинг" },
+                    { value: "title", label: "Название" },
+                  ].map((option) => (
+                    <button
+                      key={option.value}
+                      className={`${styles.dropdownOption} ${sortBy === option.value ? styles.dropdownOptionActive : ""}`}
+                      onClick={() => {
+                        onSortChange(option.value as SortOption);
+                        setIsDropdownClosing(true);
+                        setTimeout(() => {
+                          setShowFilterDropdown(false);
+                          setIsDropdownClosing(false);
+                        }, 200);
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showHistory && searchHistory.length > 0 && (
-          <div className={styles.searchHistory}>
+          <div className={`${styles.searchHistory} ${isHistoryClosing ? styles.closing : ""}`}>
             <div className={styles.historyHeader}>Недавние поиски</div>
             {searchHistory.map((historyQuery, index) => (
               <div
                 key={index}
                 className={styles.historyItem}
-                onClick={() => onHistorySelect(historyQuery)}
+                onClick={() => {
+                  setIsHistoryClosing(true);
+                  setTimeout(() => {
+                    setIsHistoryClosing(false);
+                    onHistorySelect(historyQuery);
+                  }, 200);
+                }}
               >
                 <SearchIcon size={16} />
                 <span>{historyQuery}</span>
@@ -145,29 +248,28 @@ export default function Search({
       </div>
 
       <div className={styles.searchFilters}>
-        {contentType !== "characters" && contentType !== "people" && (
-          <select
-            className={styles.filterSelect}
-            value={kindFilter}
-            onChange={(e) => onKindChange(e.target.value)}
-          >
-            {getKindOptions().map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+        {(kindFilter || sortBy !== "relevance") && (
+          <div className={styles.activeFilters}>
+            {contentType !== "characters" && contentType !== "people" && kindFilter && (
+              <button
+                className={styles.activeFilter}
+                onClick={() => onKindChange("")}
+              >
+                Тип: {getKindOptions().find(opt => opt.value === kindFilter)?.label}
+                <span className={styles.filterRemove}>×</span>
+              </button>
+            )}
+            {sortBy !== "relevance" && (
+              <button
+                className={styles.activeFilter}
+                onClick={() => onSortChange("relevance")}
+              >
+                Сортировка: {sortBy === "score" ? "Рейтинг" : sortBy === "title" ? "Название" : "Релевантность"}
+                <span className={styles.filterRemove}>×</span>
+              </button>
+            )}
+          </div>
         )}
-        
-        <select
-          className={styles.sortSelect}
-          value={sortBy}
-          onChange={(e) => onSortChange(e.target.value as SortOption)}
-        >
-          <option value="relevance">Релевантность</option>
-          <option value="score">Рейтинг</option>
-          <option value="title">Название</option>
-        </select>
       </div>
     </div>
   );

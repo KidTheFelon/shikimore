@@ -21,6 +21,11 @@ interface ContentListProps {
   onContentClick: (item: ContentItem) => void;
   cardColors: Record<number, string>;
   onImageLoad: (e: React.SyntheticEvent<HTMLImageElement, Event>, id: number) => void;
+  blurred?: boolean;
+  slideDirection?: 'left' | 'right' | null;
+  exitDirection?: 'left' | 'right' | null;
+  animationPhase?: 'exiting' | 'entering' | 'none';
+  filterAnimationKey?: number;
 }
 
 export default function ContentList({
@@ -30,7 +35,12 @@ export default function ContentList({
   error,
   onContentClick,
   cardColors,
-  onImageLoad
+  onImageLoad,
+  blurred,
+  slideDirection,
+  exitDirection,
+  animationPhase,
+  filterAnimationKey
 }: ContentListProps) {
   const contentItemsRef = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -44,14 +54,15 @@ export default function ContentList({
     
     return (
       <div
-        key={item.id}
-        className={styles.animeItem}
+        key={`${item.id}-${filterAnimationKey ?? 0}`}
+        className={`${styles.animeItem} ${(filterAnimationKey ?? 0) > 0 ? styles.liftUp : ''}`}
         onClick={() => onContentClick(item)}
         tabIndex={0}
         ref={(el) => (contentItemsRef.current[index] = el)}
         style={{
           borderLeft: `4px solid ${accentColor}`,
           transition: "border-color 0.3s ease",
+          animationDelay: `${index * 50}ms`,
         }}
       >
         <div className={styles.animePosterContainer}>
@@ -77,7 +88,7 @@ export default function ContentList({
             <div className={styles.animeTitleContainer}>
               {getItemRussian(item) && (() => {
                 const russian = getItemRussian(item)!;
-                const params = getMarqueeParams(russian, 210, 7);
+                const params = getMarqueeParams(russian, 175, 7);
                 return (
                   <div className={`animeTitleContainer ${params.isLong ? 'hasMarquee' : ''}`}>
                     <div className={`animeMarqueeInner ${params.isLong ? 'isMarquee' : ''}`} style={params.style}>
@@ -158,7 +169,7 @@ export default function ContentList({
 
   if (loading && items.length === 0) {
     return (
-      <div className={styles.animeList}>
+      <div className={`${styles.animeList} ${animationPhase === 'entering' && slideDirection ? styles[`slideIn${slideDirection === 'left' ? 'Left' : 'Right'}`] : ''}`}>
         {Array.from({ length: 8 }).map((_, index) => (
           <SkeletonCard key={index} />
         ))}
@@ -191,9 +202,9 @@ export default function ContentList({
   }
 
   return (
-    <div className={styles.animeList}>
+    <div className={`${styles.animeList} ${blurred ? styles.blurred : ""} ${animationPhase === 'exiting' && exitDirection ? styles[`slideOut${exitDirection === 'left' ? 'Left' : 'Right'}`] : ''} ${animationPhase === 'entering' && slideDirection ? styles[`slideIn${slideDirection === 'left' ? 'Left' : 'Right'}`] : ''}`}>
       {items.map((item, index) => renderContentCard(item, index))}
-      
+
       {loadingMore && (
         <>
           <SkeletonCard />
