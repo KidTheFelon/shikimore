@@ -32,6 +32,7 @@ function App() {
   // Search state
   const [searchQuery, setSearchQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<string>("");
+  const [genreFilter, setGenreFilter] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<SortOption>("relevance");
   const [currentPage, setCurrentPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -68,7 +69,7 @@ function App() {
       }
     }
     // Load initial content on startup
-    fetchContent(contentType, "", 1, kindFilter, false);
+    fetchContent(contentType, "", 1, kindFilter, genreFilter, false);
   }, []);
 
   // Reset animation phase after content loads
@@ -164,6 +165,32 @@ function App() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Local filter by exact match (multi-word) or partial match (single word)
+  const filterByExactMatch = (items: ContentItem[], query: string): ContentItem[] => {
+    if (!query) return items;
+
+    const queryLower = query.toLowerCase();
+    const words = queryLower.trim().split(/\s+/);
+    const isSingleWord = words.length === 1;
+
+    return items.filter(item => {
+      const title = (item as any).title?.toLowerCase() || "";
+      const russian = (item as any).russian?.toLowerCase() || "";
+
+      const titles = [title, russian];
+
+      if (isSingleWord) {
+        // Single word: partial match in any title
+        return titles.some(t => t.includes(queryLower));
+      } else {
+        // Multiple words: all words must be present in any title (not necessarily consecutive)
+        return titles.some(t => {
+          return words.every(word => t.includes(word));
+        });
+      }
+    });
+  };
+
   // API error handling
   const handleApiError = (err: unknown): string => {
     if (typeof err === "object" && err !== null && "kind" in err) {
@@ -202,6 +229,7 @@ function App() {
     query: string,
     page: number,
     kind: string,
+    genres: string[],
     append: boolean = false
   ) => {
     if (append) {
@@ -218,15 +246,17 @@ function App() {
       const getOrderValue = () => {
         if (sortBy === "score") return "ranked";
         if (sortBy === "title") return "name";
-        return "id"; // relevance = default sort by id
+        return undefined; // relevance = let API use default relevance
       };
       
       if (type === "anime") {
+        console.log("[Frontend] Calling search_anime with:", { query, page, limit, kind, genres });
         result = await invoke<SearchResult<any>>("search_anime", {
           query,
           page,
           limit,
           kind: kind || undefined,
+          genres: genres.length > 0 ? genres.join(",") : undefined,
           order: getOrderValue(),
         });
       } else if (type === "manga") {
@@ -235,6 +265,7 @@ function App() {
           page,
           limit,
           kind: kind || undefined,
+          genres: genres.length > 0 ? genres.join(",") : undefined,
           order: getOrderValue(),
         });
       } else if (type === "characters") {
@@ -253,7 +284,7 @@ function App() {
       if (append) {
         setContentList(prev => [...prev, ...result.items]);
       } else {
-        setContentList(result.items);
+        setContentList(filterByExactMatch(result.items, query));
       }
       
       setHasMore(result.items.length === limit);
@@ -281,7 +312,7 @@ function App() {
     debounceTimerRef.current = window.setTimeout(() => {
       setCurrentPage(1);
       setHasMore(true);
-      fetchContent(contentType, searchQuery, 1, kindFilter, false);
+      fetchContent(contentType, searchQuery, 1, kindFilter, genreFilter, false);
       if (searchQuery && !searchHistory.includes(searchQuery)) {
         const newHistory = [searchQuery, ...searchHistory.filter((q) => q !== searchQuery)].slice(0, 5);
         setSearchHistory(newHistory);
@@ -294,7 +325,7 @@ function App() {
         window.clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [searchQuery, kindFilter, sortBy, contentType, fetchContent, searchHistory]);
+  }, [searchQuery, kindFilter, genreFilter, sortBy, contentType, fetchContent, searchHistory]);
 
   // Lazy pagination
   useEffect(() => {
@@ -308,14 +339,14 @@ function App() {
         if (scrollTop + windowHeight >= documentHeight * 0.8) {
           const nextPage = currentPage + 1;
           setCurrentPage(nextPage);
-          fetchContent(contentType, searchQuery, nextPage, kindFilter, true);
+          fetchContent(contentType, searchQuery, nextPage, kindFilter, genreFilter, true);
         }
       }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [loading, loadingMore, hasMore, searchQuery, currentPage, kindFilter, contentType, fetchContent, contentList.length]);
+  }, [loading, loadingMore, hasMore, searchQuery, currentPage, kindFilter, genreFilter, contentType, fetchContent, contentList.length]);
 
   // Event handlers
   const handleSearchChange = (value: string) => {
@@ -335,7 +366,7 @@ function App() {
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.currentTarget.blur();
-      fetchContent(contentType, searchQuery, 1, kindFilter);
+      fetchContent(contentType, searchQuery, 1, kindFilter, genreFilter);
     }
   };
 
@@ -357,14 +388,34 @@ function App() {
       setCurrentPage(1);
       setHasMore(true);
       setKindFilter("");
+      setGenreFilter([]);
       setAnimationPhase('entering');
-      fetchContent(newType, "", 1, "", false);
+      fetchContent(newType, "", 1, "", [], false);
     }, 300); // Длительность анимации выхода
   };
 
   const handleKindChange = (value: string) => {
     setFilterAnimationKey(prev => prev + 1);
     setKindFilter(value);
+    setCurrentPage(1);
+    setHasMore(true);
+    setContentList([]);
+  };
+
+  const handleGenreChange = (value: string) => {
+    setFilterAnimationKey(prev => prev + 1);
+    setGenreFilter(prev => {
+      if (value === "") {
+        return [];
+      }
+      if (prev.includes(value)) {
+        return prev.filter(g => g !== value);
+      }
+      if (prev.length >= 3) {
+        return prev;
+      }
+      return [...prev, value];
+    });
     setCurrentPage(1);
     setHasMore(true);
     setContentList([]);
@@ -379,9 +430,12 @@ function App() {
   };
 
   const handleHistorySelect = (query: string) => {
+    console.log('handleHistorySelect called with:', query);
     setSearchQuery(query);
+    setCurrentPage(1);
+    setHasMore(true);
+    setContentList([]);
     setShowHistory(false);
-    searchInputRef.current?.blur();
   };
 
   const handleHistoryClose = () => {
@@ -483,7 +537,7 @@ function App() {
   }, [selectedItem, showToast]);
 
   const handleRetry = () => {
-    fetchContent(contentType, searchQuery, currentPage, kindFilter);
+    fetchContent(contentType, searchQuery, currentPage, kindFilter, genreFilter);
   };
 
   // Close history when clicking outside
@@ -536,11 +590,12 @@ function App() {
               setSelectedItem({ type, id });
               setDetailData(null);
             }}
-            onSearchGenre={(_genreId, genreName) => {
+            onSearchGenre={(genreId, _genreName) => {
               setSelectedItem(null);
               setDetailData(null);
               setContentType(selectedItem!.type as ContentType);
-              setSearchQuery(genreName);
+              setGenreFilter([genreId.toString()]);
+              setSearchQuery("");
             }}
             onSearchStudio={(_studioId, studioName) => {
               setSelectedItem(null);
@@ -564,6 +619,8 @@ function App() {
             contentType={contentType}
             kindFilter={kindFilter}
             onKindChange={handleKindChange}
+            genreFilter={genreFilter}
+            onGenreChange={handleGenreChange}
             sortBy={sortBy}
             onSortChange={handleSortChange}
             searchHistory={searchHistory}

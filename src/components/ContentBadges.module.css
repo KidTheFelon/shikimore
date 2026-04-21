@@ -58,3 +58,9 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
   transition: var(--transition);
 }
+
+.contentCardEpisodes.completed {
+  background: linear-gradient(135deg, #a855f7, #7c3aed);
+  border-color: rgba(168, 85, 247, 0.4);
+  box-shadow: 0 4px 12px rgba(168, 85, 247, 0.4);
+}

@@ -163,6 +163,39 @@ export default function DetailView({
     return kind ? colors[kind] || colors.other : colors.other;
   };
 
+  const getKindColor = (kind?: string, episodes?: number, episodesAired?: number) => {
+    const colors: Record<string, string> = {
+      movie: "rgba(239, 68, 68, 1)", // красный
+      ova: "rgba(139, 92, 246, 1)", // фиолетовый
+      ona: "rgba(34, 197, 94, 1)", // зеленый
+      special: "rgba(251, 146, 60, 1)", // оранжевый
+      tv_13: "rgba(59, 130, 246, 1)", // синий
+      tv_24: "rgba(59, 130, 246, 1)", // синий
+      tv_48: "rgba(59, 130, 246, 1)", // синий
+      music: "rgba(236, 72, 153, 1)", // розовый
+      doujin: "rgba(168, 85, 247, 1)", // пурпурный
+      manga: "rgba(245, 158, 11, 1)", // желтый
+      manhwa: "rgba(245, 158, 11, 1)", // желтый
+      manhua: "rgba(245, 158, 11, 1)", // желтый
+      light_novel: "rgba(168, 85, 247, 1)", // пурпурный
+      novel: "rgba(168, 85, 247, 1)", // пурпурный
+      one_shot: "rgba(239, 68, 68, 1)", // красный
+    };
+
+    console.log('getKindColor:', { kind, episodes, episodesAired });
+
+    if (kind === "tv" && episodes && episodesAired && episodes > 0) {
+      const progress = Math.min(episodesAired / episodes, 1) * 100;
+      const gradient = `linear-gradient(to right, rgba(59, 130, 246, 1) 0%, rgba(59, 130, 246, 1) ${progress}%, rgba(59, 130, 246, 0.3) ${progress}%, rgba(59, 130, 246, 0.3) 100%)`;
+      console.log('TV gradient:', { progress, gradient });
+      return gradient;
+    }
+
+    const color = kind ? colors[kind] || "var(--primary)" : "var(--primary)";
+    console.log('Regular color:', color);
+    return color;
+  };
+
   const formatExternalLink = (kind: string, url: string) => {
     const linkInfo = { label: translateExternalLink(kind) };
     let faviconUrl = "";
@@ -281,16 +314,39 @@ export default function DetailView({
       </button>
 
       <div className={styles.detailHeader}>
-        <div className={styles.detailPosterWrapper}>
-          {data.poster_url ? (
-              <img
-                src={data.poster_url}
-                alt={data.title}
-                className={styles.detailPoster}
-              />
-          ) : (
-            <div className={styles.detailPosterPlaceholder}>Нет изображения</div>
-          )}
+        <div className={styles.detailPosterContainer}>
+          <div className={styles.detailPosterWrapper}>
+            {data.poster_url ? (
+                <img
+                  src={data.poster_url}
+                  alt={data.title}
+                  className={styles.detailPoster}
+                />
+            ) : (
+              <div className={styles.detailPosterPlaceholder}>Нет изображения</div>
+            )}
+          </div>
+          <div className={styles.posterOverlay} style={{ background: getKindColor(data.kind, isAnime ? animeData?.episodes : undefined, isAnime ? (animeData?.status === "released" ? animeData?.episodes : animeData?.episodes_aired) : undefined) || 'var(--primary)' }}>
+            {data.kind && (
+              <div className={styles.posterOverlayItem}>
+                {formatKind(data.kind)}
+              </div>
+            )}
+            {isAnime && animeData?.episodes && (
+              <div className={styles.posterOverlayItem}>
+                {(() => {
+                  const aired = animeData?.status === "released" ? animeData.episodes : animeData?.episodes_aired;
+                  return aired ? `${aired} / ${animeData.episodes} эп.` : `${animeData.episodes} эп.`;
+                })()}
+              </div>
+            )}
+            {!isAnime && mangaData?.volumes && (
+              <div className={styles.posterOverlayItem}>{mangaData.volumes} том.</div>
+            )}
+            {!isAnime && mangaData?.chapters && (
+              <div className={styles.posterOverlayItem}>{mangaData.chapters} гл.</div>
+            )}
+          </div>
         </div>
         <div className={styles.detailInfo}>
           <div className={styles.detailTitleRow}>
@@ -356,34 +412,11 @@ export default function DetailView({
                 )}
               </div>
             )}
-            {data.kind && (
-              <button 
-                className={`${styles.detailBadge} ${styles.clickable}`}
-                onClick={() => onSearchGenre(-1, formatKind(data.kind) || "")}
-                title={`Показать все ${formatKind(data.kind)}`}
-              >
-                {formatKind(data.kind)}
-              </button>
-            )}
             {data.status && (
               <span className={styles.detailBadge}>{formatStatus(data.status)}</span>
             )}
             {isAnime && animeData?.rating && (
               <span className={styles.detailBadge}>{formatRating(animeData.rating)}</span>
-            )}
-            {isAnime && animeData?.episodes && (
-              <span className={styles.detailInfo}>
-                {(() => {
-                  const aired = animeData?.status === "released" ? animeData.episodes : animeData?.episodes_aired;
-                  return aired ? `${aired} / ${animeData.episodes} эп.` : `${animeData.episodes} эп.`;
-                })()}
-              </span>
-            )}
-            {!isAnime && mangaData?.volumes && (
-              <span className={styles.detailInfo}>{mangaData.volumes} том.</span>
-            )}
-            {!isAnime && mangaData?.chapters && (
-              <span className={styles.detailInfo}>{mangaData.chapters} гл.</span>
             )}
             {isAnime && animeData?.duration && (
               <span className={styles.detailInfo}>{animeData.duration} мин.</span>

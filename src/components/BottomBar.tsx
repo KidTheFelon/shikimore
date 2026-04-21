@@ -34,14 +34,14 @@ export default function BottomBar({ contentType, onContentTypeChange }: BottomBa
           className={`${styles.barBtn} ${contentType === "anime" ? styles.active : ""}`}
           onClick={() => onContentTypeChange("anime")}
         >
-          <AnimeIcon size={40} />
+          <AnimeIcon size={32} />
           <span>Аниме</span>
         </button>
         <button
           className={`${styles.barBtn} ${contentType === "manga" ? styles.active : ""}`}
           onClick={() => onContentTypeChange("manga")}
         >
-          <MangaIcon size={40} />
+          <MangaIcon size={32} />
           <span>Манга</span>
         </button>
       </div>

@@ -363,9 +363,10 @@ async fn search_anime(
     page: Option<u32>,
     limit: Option<u32>,
     kind: Option<String>,
+    genres: Option<String>,
     order: Option<String>,
 ) -> Result<SearchResult<Anime>, ApiError> {
-    println!(">>> [Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}", query, page, limit, kind);
+    println!(">>> [Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}, genres={:?}", query, page, limit, kind, genres);
     
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
@@ -391,13 +392,15 @@ async fn search_anime(
         page: Some(page as i32),
         kind: kind.clone(),
         censored: None,
-        genre: None,
+        genre: genres.clone(),
         order: order.clone(),
         rating: None,
         season: None,
         studio: None,
         status: None,
     };
+
+    println!(">>> [Backend] AnimeSearchParams: genre = {:?}", params.genre);
     
     println!(">>> [Backend] Выполнение запроса к API...");
     let animes = match client.animes(params).await {
@@ -444,6 +447,7 @@ async fn search_manga(
     page: Option<u32>,
     limit: Option<u32>,
     kind: Option<String>,
+    genres: Option<String>,
     order: Option<String>,
 ) -> Result<SearchResult<Manga>, ApiError> {
     let page = page.unwrap_or(1);
@@ -460,7 +464,7 @@ async fn search_manga(
         page: Some(page as i32),
         kind: kind.clone(),
         censored: None,
-        genre: None,
+        genre: genres.clone(),
         order: order.clone(),
         publisher: None,
         status: None,

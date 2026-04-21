@@ -90,31 +90,58 @@
   }
 }
 
+/* Poster container */
+.detailPosterContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  gap: 0;
+}
+
 /* Poster */
 .detailPosterWrapper {
   position: relative;
   width: 100%;
-  aspect-ratio: 2/3;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   overflow: hidden;
   box-shadow: var(--shadow-lg);
 }
 
 .detailPoster {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 2/3;
   object-fit: cover;
+  display: block;
 }
 
 .detailPosterPlaceholder {
   width: 100%;
-  height: 100%;
+  aspect-ratio: 2/3;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-secondary);
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+.posterOverlay {
+  padding: 0.75rem 1rem;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  min-height: fit-content;
+}
+
+.posterOverlayItem {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: white;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 /* Info section */

@@ -9,6 +9,8 @@ interface SearchProps {
   contentType: ContentType;
   kindFilter: string;
   onKindChange: (value: string) => void;
+  genreFilter: string[];
+  onGenreChange: (value: string) => void;
   sortBy: SortOption;
   onSortChange: (value: SortOption) => void;
   searchHistory: string[];
@@ -25,6 +27,8 @@ export default function Search({
   contentType,
   kindFilter,
   onKindChange,
+  genreFilter,
+  onGenreChange,
   sortBy,
   onSortChange,
   searchHistory,
@@ -133,6 +137,113 @@ export default function Search({
     return [];
   };
 
+  const getGenreOptions = () => {
+    if (contentType === "anime") {
+      return [
+        { value: "", label: "Все жанры" },
+        { value: "1", label: "Экшен" },
+        { value: "2", label: "Приключения" },
+        { value: "4", label: "Комедия" },
+        { value: "8", label: "Драма" },
+        { value: "10", label: "Фэнтези" },
+        { value: "14", label: "Ужасы" },
+        { value: "7", label: "Мистика" },
+        { value: "22", label: "Романтика" },
+        { value: "24", label: "Sci-Fi" },
+        { value: "36", label: "Повседневность" },
+        { value: "30", label: "Спорт" },
+        { value: "37", label: "Сверхъестественное" },
+        { value: "41", label: "Триллер" },
+        { value: "11", label: "Игры" },
+        { value: "40", label: "Психологическое" },
+        { value: "6", label: "Демоны" },
+        { value: "9", label: "Этти" },
+        { value: "12", label: "Хентай" },
+        { value: "13", label: "Исторический" },
+        { value: "16", label: "Магия" },
+        { value: "19", label: "Музыка" },
+        { value: "18", label: "Меха" },
+        { value: "20", label: "Пародия" },
+        { value: "21", label: "Самураи" },
+        { value: "23", label: "Школа" },
+        { value: "27", label: "Сёнен" },
+        { value: "32", label: "Вампиры" },
+        { value: "33", label: "Яой" },
+        { value: "34", label: "Юри" },
+        { value: "35", label: "Гарем" },
+        { value: "31", label: "Супер сила" },
+        { value: "38", label: "Военное" },
+        { value: "15", label: "Детское" },
+        { value: "3", label: "Машины" },
+        { value: "17", label: "Боевые искусства" },
+        { value: "5", label: "Безумие" },
+        { value: "29", label: "Космос" },
+        { value: "26", label: "Сёдзё-ай" },
+        { value: "43", label: "Дзёсей" },
+        { value: "28", label: "Сёнен-ай" },
+        { value: "25", label: "Сёдзё" },
+        { value: "42", label: "Сэйнэн" },
+        { value: "39", label: "Полиция" },
+        { value: "543", label: "Гурман" },
+        { value: "541", label: "Работа" },
+        { value: "539", label: "Эротика" },
+      ];
+    } else if (contentType === "manga") {
+      return [
+        { value: "", label: "Все жанры" },
+        { value: "56", label: "Экшен" },
+        { value: "68", label: "Приключения" },
+        { value: "49", label: "Комедия" },
+        { value: "50", label: "Драма" },
+        { value: "57", label: "Фэнтези" },
+        { value: "80", label: "Ужасы" },
+        { value: "46", label: "Мистика" },
+        { value: "62", label: "Романтика" },
+        { value: "53", label: "Sci-Fi" },
+        { value: "54", label: "Повседневность" },
+        { value: "76", label: "Спорт" },
+        { value: "48", label: "Сверхъестественное" },
+        { value: "81", label: "Триллер" },
+        { value: "79", label: "Игры" },
+        { value: "67", label: "Психологическое" },
+        { value: "72", label: "Демоны" },
+        { value: "51", label: "Этти" },
+        { value: "59", label: "Хентай" },
+        { value: "69", label: "Исторический" },
+        { value: "58", label: "Магия" },
+        { value: "78", label: "Музыка" },
+        { value: "83", label: "Меха" },
+        { value: "86", label: "Пародия" },
+        { value: "88", label: "Самураи" },
+        { value: "60", label: "Школа" },
+        { value: "47", label: "Сёнен" },
+        { value: "64", label: "Вампиры" },
+        { value: "65", label: "Яой" },
+        { value: "75", label: "Юри" },
+        { value: "71", label: "Гарем" },
+        { value: "82", label: "Супер сила" },
+        { value: "70", label: "Военное" },
+        { value: "77", label: "Детское" },
+        { value: "84", label: "Машины" },
+        { value: "66", label: "Боевые искусства" },
+        { value: "90", label: "Безумие" },
+        { value: "85", label: "Космос" },
+        { value: "73", label: "Сёдзё-ай" },
+        { value: "87", label: "Дзёсей" },
+        { value: "55", label: "Сёнен-ай" },
+        { value: "63", label: "Сёдзё" },
+        { value: "52", label: "Сэйнэн" },
+        { value: "89", label: "Полиция" },
+        { value: "544", label: "Гурман" },
+        { value: "542", label: "Работа" },
+        { value: "540", label: "Эротика" },
+        { value: "61", label: "Додзинси" },
+        { value: "74", label: "Смена пола" },
+      ];
+    }
+    return [];
+  };
+
   return (
     <div className={styles.searchSection}>
       <div className={styles.searchInputWrapper}>
@@ -173,7 +284,7 @@ export default function Search({
                 <>
                   <div className={styles.dropdownSection}>
                     <div className={styles.dropdownHeader}>Тип</div>
-                    <div className={styles.dropdownOptions}>
+                    <div className={`${styles.dropdownOptions} ${styles.kindOptions}`}>
                       {getKindOptions().map((option) => (
                         <button
                           key={option.value}
@@ -192,34 +303,81 @@ export default function Search({
                       ))}
                     </div>
                   </div>
-                  <div className={styles.dropdownDivider} />
+                  <div className={styles.dropdownSection}>
+                    <div className={styles.dropdownHeader}>Сортировка</div>
+                    <div className={styles.dropdownOptions}>
+                      {[
+                        { value: "relevance", label: "Релевантность" },
+                        { value: "score", label: "Рейтинг" },
+                        { value: "title", label: "Название" },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          className={`${styles.dropdownOption} ${sortBy === option.value ? styles.dropdownOptionActive : ""}`}
+                          onClick={() => {
+                            onSortChange(option.value as SortOption);
+                            setIsDropdownClosing(true);
+                            setTimeout(() => {
+                              setShowFilterDropdown(false);
+                              setIsDropdownClosing(false);
+                            }, 200);
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className={styles.dropdownSection}>
+                    <div className={styles.dropdownHeader}>Жанр</div>
+                    <div className={`${styles.dropdownOptions} ${styles.genreOptions}`}>
+                      {getGenreOptions().map((option) => (
+                        <button
+                          key={option.value}
+                          className={`${styles.dropdownOption} ${genreFilter.includes(option.value) ? styles.dropdownOptionActive : ""}`}
+                          onClick={() => {
+                            onGenreChange(option.value);
+                            setIsDropdownClosing(true);
+                            setTimeout(() => {
+                              setShowFilterDropdown(false);
+                              setIsDropdownClosing(false);
+                            }, 200);
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </>
               )}
-              <div className={styles.dropdownSection}>
-                <div className={styles.dropdownHeader}>Сортировка</div>
-                <div className={styles.dropdownOptions}>
-                  {[
-                    { value: "relevance", label: "Релевантность" },
-                    { value: "score", label: "Рейтинг" },
-                    { value: "title", label: "Название" },
-                  ].map((option) => (
-                    <button
-                      key={option.value}
-                      className={`${styles.dropdownOption} ${sortBy === option.value ? styles.dropdownOptionActive : ""}`}
-                      onClick={() => {
-                        onSortChange(option.value as SortOption);
-                        setIsDropdownClosing(true);
-                        setTimeout(() => {
-                          setShowFilterDropdown(false);
-                          setIsDropdownClosing(false);
-                        }, 200);
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
+              {contentType === "characters" || contentType === "people" ? (
+                <div className={styles.dropdownSection}>
+                  <div className={styles.dropdownHeader}>Сортировка</div>
+                  <div className={styles.dropdownOptions}>
+                    {[
+                      { value: "relevance", label: "Релевантность" },
+                      { value: "score", label: "Рейтинг" },
+                      { value: "title", label: "Название" },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        className={`${styles.dropdownOption} ${sortBy === option.value ? styles.dropdownOptionActive : ""}`}
+                        onClick={() => {
+                          onSortChange(option.value as SortOption);
+                          setIsDropdownClosing(true);
+                          setTimeout(() => {
+                            setShowFilterDropdown(false);
+                            setIsDropdownClosing(false);
+                          }, 200);
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
             </div>
           </div>
         )}
@@ -231,11 +389,12 @@ export default function Search({
               <div
                 key={index}
                 className={styles.historyItem}
-                onClick={() => {
+                onMouseDown={() => {
+                  console.log('History item clicked:', historyQuery);
+                  onHistorySelect(historyQuery);
                   setIsHistoryClosing(true);
                   setTimeout(() => {
                     setIsHistoryClosing(false);
-                    onHistorySelect(historyQuery);
                   }, 200);
                 }}
               >
@@ -248,7 +407,7 @@ export default function Search({
       </div>
 
       <div className={styles.searchFilters}>
-        {(kindFilter || sortBy !== "relevance") && (
+        {(kindFilter || genreFilter || sortBy !== "relevance") && (
           <div className={styles.activeFilters}>
             {contentType !== "characters" && contentType !== "people" && kindFilter && (
               <button
@@ -259,6 +418,16 @@ export default function Search({
                 <span className={styles.filterRemove}>×</span>
               </button>
             )}
+            {contentType !== "characters" && contentType !== "people" && genreFilter.length > 0 && genreFilter.map(g => (
+              <button
+                key={g}
+                className={styles.activeFilter}
+                onClick={() => onGenreChange(g)}
+              >
+                Жанр: {getGenreOptions().find(opt => opt.value === g)?.label}
+                <span className={styles.filterRemove}>×</span>
+              </button>
+            ))}
             {sortBy !== "relevance" && (
               <button
                 className={styles.activeFilter}
