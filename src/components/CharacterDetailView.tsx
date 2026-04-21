@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import styles from "./CharacterDetailView.module.css";
 import InfoChip from "./InfoChip";
 import HorizontalScroll from "./HorizontalScroll";
+import ImageWithSkeleton from "./ImageWithSkeleton";
+import ReadMoreButton from "./ReadMoreButton";
 import { getMarqueeParams } from "../utils/marquee";
 import { getInfoChipLabel, translateRole } from "../utils/badgeTexts";
 import { fetchVoiceActors, translateLanguage } from "../utils/anilist";
@@ -22,15 +24,28 @@ export default function CharacterDetailView({
   onBack,
   onNavigate
 }: CharacterDetailViewProps) {
-  const [descExpanded, setDescExpanded] = useState(false);
   const [voiceActors, setVoiceActors] = useState<VoiceActor[]>([]);
 
   useEffect(() => {
+    const abortController = new AbortController();
+
     if (data?.name) {
       fetchVoiceActors(data.name)
-        .then(setVoiceActors)
-        .catch(err => console.error("Failed to load voice actors:", err));
+        .then(actors => {
+          if (!abortController.signal.aborted) {
+            setVoiceActors(actors);
+          }
+        })
+        .catch(err => {
+          if (!abortController.signal.aborted) {
+            console.error("Failed to load voice actors:", err);
+          }
+        });
     }
+
+    return () => {
+      abortController.abort();
+    };
   }, [data?.name]);
 
   if (loading || !data) {
@@ -72,7 +87,11 @@ export default function CharacterDetailView({
       <div className={styles.detailHeader}>
         <div className={styles.detailPosterWrapper}>
           {data.poster_url ? (
-            <img src={data.poster_url} alt={data.russian || data.name} className={styles.detailPoster} />
+            <ImageWithSkeleton
+              src={data.poster_url}
+              alt={data.russian || data.name}
+              className={styles.detailPoster}
+            />
           ) : (
             <div className={styles.detailPosterPlaceholder}>Нет изображения</div>
           )}
@@ -117,34 +136,20 @@ export default function CharacterDetailView({
 
             {data.description && (
               <div className={styles.detailHeaderDescriptionWrapper}>
-                <div 
-                  className={`${styles.detailHeaderDescription} ${descExpanded ? styles.expanded : ''}`}
-                  dangerouslySetInnerHTML={{ __html: data.description_html || data.description }}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    const spoiler = target.closest('.b-spoiler, .b-spoiler_block, .b-spoiler_inline');
-                    if (!spoiler) return;
+                <ReadMoreButton className={styles.detailHeaderDescription}>
+                  <div
+                    dangerouslySetInnerHTML={{ __html: data.description_html || data.description }}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      const spoiler = target.closest('.b-spoiler, .b-spoiler_block, .b-spoiler_inline');
+                      if (!spoiler) return;
 
-                    const isLabel = target.classList.contains('b-spoiler_label') || 
-                                   target.tagName === 'LABEL' ||
-                                   spoiler.firstElementChild === target ||
-                                   spoiler.firstElementChild?.contains(target);
-                    
-                    if (isLabel) {
                       spoiler.classList.toggle('is-expanded');
                       e.preventDefault();
                       e.stopPropagation();
-                    }
-                  }}
-                />
-                {(data.description_html || data.description).length > 300 && (
-                  <button 
-                    className={styles.descriptionMoreBtn}
-                    onClick={() => setDescExpanded(!descExpanded)}
-                  >
-                    {descExpanded ? "Свернуть" : "Читать полностью..."}
-                  </button>
-                )}
+                    }}
+                  />
+                </ReadMoreButton>
               </div>
             )}
           </div>
@@ -178,7 +183,7 @@ export default function CharacterDetailView({
                       >
                         <div className={styles.rolePosterWrapper}>
                           {item.poster_url ? (
-                            <img
+                            <ImageWithSkeleton
                               src={item.poster_url}
                               alt={item.russian || item.title}
                               className={styles.rolePoster}
@@ -193,7 +198,7 @@ export default function CharacterDetailView({
                             
                             if (allRoles.length === 0) return null;
                             const roleText = allRoles[0];
-                            const badgeParams = getMarqueeParams(roleText, 120, 6);
+                            const badgeParams = getMarqueeParams(roleText, 100, 7.5);
 
                             return (
                               <div className={`roleBadge ${styles.roleBadge}`} title={allRoles.join(", ")}>
@@ -217,11 +222,11 @@ export default function CharacterDetailView({
                           </div>
                           {(() => {
                             const name = item.russian || item.title;
-                            const nameParams = getMarqueeParams(name, 120, 8);
+                            const nameParams = getMarqueeParams(name, 110, 8.5);
                             
                             return (
-                              <div className={`roleNameContainer ${nameParams.isLong ? 'hasMarquee' : ''}`}>
-                                <div className={`roleMarqueeInner ${nameParams.isLong ? 'isMarquee' : ''}`} style={nameParams.style}>
+                              <div className={`characterNameContainer ${nameParams.isLong ? 'hasMarquee' : ''}`}>
+                                <div className={`characterMarqueeInner ${nameParams.isLong ? 'isMarquee' : ''}`} style={nameParams.style}>
                                   <div className={styles.roleTitle}>{name}</div>
                                   {nameParams.isLong && <div className={styles.roleTitle}>&nbsp;</div>}
                                 </div>
@@ -251,7 +256,7 @@ export default function CharacterDetailView({
                       >
                         <div className={styles.rolePosterWrapper}>
                           {item.poster_url ? (
-                            <img
+                            <ImageWithSkeleton
                               src={item.poster_url}
                               alt={item.russian || item.title}
                               className={styles.rolePoster}
@@ -266,7 +271,7 @@ export default function CharacterDetailView({
                             
                             if (allRoles.length === 0) return null;
                             const roleText = allRoles[0];
-                            const badgeParams = getMarqueeParams(roleText, 120, 6);
+                            const badgeParams = getMarqueeParams(roleText, 100, 7.5);
 
                             return (
                               <div className={`roleBadge ${styles.roleBadge}`} title={allRoles.join(", ")}>
@@ -289,11 +294,11 @@ export default function CharacterDetailView({
                           </div>
                           {(() => {
                             const name = item.russian || item.title;
-                            const nameParams = getMarqueeParams(name, 120, 8);
+                            const nameParams = getMarqueeParams(name, 110, 8.5);
                             
                             return (
-                              <div className={`roleNameContainer ${nameParams.isLong ? 'hasMarquee' : ''}`}>
-                                <div className={`roleMarqueeInner ${nameParams.isLong ? 'isMarquee' : ''}`} style={nameParams.style}>
+                              <div className={`characterNameContainer ${nameParams.isLong ? 'hasMarquee' : ''}`}>
+                                <div className={`characterMarqueeInner ${nameParams.isLong ? 'isMarquee' : ''}`} style={nameParams.style}>
                                   <div className={styles.roleTitle}>{name}</div>
                                   {nameParams.isLong && <div className={styles.roleTitle}>&nbsp;</div>}
                                 </div>
@@ -324,8 +329,8 @@ export default function CharacterDetailView({
                 >
                   <div className={styles.voiceActorPosterWrapper}>
                     {va.image.large || va.image.medium ? (
-                      <img
-                        src={va.image.large || va.image.medium}
+                      <ImageWithSkeleton
+                        src={va.image.large || va.image.medium || ""}
                         alt={va.name.full}
                         className={styles.voiceActorPoster}
                       />

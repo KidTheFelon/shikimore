@@ -944,6 +944,24 @@ async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
 }
 
 #[tauri::command]
+async fn get_similar_anime(id: i64) -> Result<Vec<shikicrate::SimilarAnime>, ApiError> {
+    println!("--- [Backend] Вызов get_similar_anime (ID: {}) ---", id);
+    let client = match ShikicrateClient::new() {
+        Ok(c) => c,
+        Err(e) => {
+            println!("[Backend] Ошибка создания клиента: {:?}", e);
+            return Err(ApiError::from(e));
+        }
+    };
+
+    let similar = client.similar_anime(id).await.map_err(ApiError::from)?;
+
+    println!("[Backend] Получено {} похожих аниме", similar.len());
+
+    Ok(similar)
+}
+
+#[tauri::command]
 async fn get_accent_color(url: String) -> Result<String, String> {
     let bytes = reqwest::get(&url)
         .await
@@ -997,7 +1015,8 @@ fn main() {
             get_anime_by_id,
             get_manga_by_id,
             get_character_details,
-            get_accent_color
+            get_accent_color,
+            get_similar_anime
         ])
         .setup(|_app| {
             println!("Tauri приложение инициализировано");

@@ -14,11 +14,11 @@ interface BaseChipProps {
   borderColor?: string;
 }
 
-const Chip = ({ 
-  children, 
-  className = '', 
-  clickable = false, 
-  onClick, 
+const Chip = ({
+  children,
+  className = '',
+  clickable = false,
+  onClick,
   title,
   variant = 'default',
   size = 'md',
@@ -26,11 +26,6 @@ const Chip = ({
   backgroundColor,
   borderColor
 }: BaseChipProps) => {
-  // Validate info variant structure
-  if (variant === 'info' && React.Children.count(children) !== 2) {
-    console.warn('Chip variant "info" expects exactly 2 children: label and value');
-  }
-
   const chipClasses = [
     styles.chip,
     styles[variant],

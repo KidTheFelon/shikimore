@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "test": "vitest",
+    "gen-types": "cd shikicrate && cargo run --bin gen_types",
     "test:ui": "vitest --ui"
   },
   "dependencies": {

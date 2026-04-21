@@ -42,6 +42,9 @@ export default function Search({
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [isDropdownClosing, setIsDropdownClosing] = useState(false);
   const [isHistoryClosing, setIsHistoryClosing] = useState(false);
+  const historyCloseTimerRef = useRef<number | null>(null);
+  const filterCloseTimerRef = useRef<number | null>(null);
+  const filterScrollCloseTimerRef = useRef<number | null>(null);
 
   // Close history when clicking outside
   useEffect(() => {
@@ -54,7 +57,10 @@ export default function Search({
         !target.closest(`.${styles.searchHistory}`)
       ) {
         setIsHistoryClosing(true);
-        setTimeout(() => {
+        if (historyCloseTimerRef.current) {
+          clearTimeout(historyCloseTimerRef.current);
+        }
+        historyCloseTimerRef.current = window.setTimeout(() => {
           setIsHistoryClosing(false);
           onHistoryClose?.();
         }, 200);
@@ -78,7 +84,10 @@ export default function Search({
         !target.closest(`.${styles.filterBtn}`)
       ) {
         setIsDropdownClosing(true);
-        setTimeout(() => {
+        if (filterCloseTimerRef.current) {
+          clearTimeout(filterCloseTimerRef.current);
+        }
+        filterCloseTimerRef.current = window.setTimeout(() => {
           setShowFilterDropdown(false);
           setIsDropdownClosing(false);
         }, 200);
@@ -96,7 +105,10 @@ export default function Search({
     const handleScroll = () => {
       if (showFilterDropdown && !isDropdownClosing) {
         setIsDropdownClosing(true);
-        setTimeout(() => {
+        if (filterScrollCloseTimerRef.current) {
+          clearTimeout(filterScrollCloseTimerRef.current);
+        }
+        filterScrollCloseTimerRef.current = window.setTimeout(() => {
           setShowFilterDropdown(false);
           setIsDropdownClosing(false);
         }, 200);
@@ -108,6 +120,21 @@ export default function Search({
       return () => window.removeEventListener("scroll", handleScroll);
     }
   }, [showFilterDropdown, isDropdownClosing]);
+
+  // Cleanup all timers on unmount
+  useEffect(() => {
+    return () => {
+      if (historyCloseTimerRef.current) {
+        clearTimeout(historyCloseTimerRef.current);
+      }
+      if (filterCloseTimerRef.current) {
+        clearTimeout(filterCloseTimerRef.current);
+      }
+      if (filterScrollCloseTimerRef.current) {
+        clearTimeout(filterScrollCloseTimerRef.current);
+      }
+    };
+  }, []);
 
   const getKindOptions = () => {
     if (contentType === "anime") {
@@ -264,7 +291,10 @@ export default function Search({
             onClick={() => {
               if (showFilterDropdown) {
                 setIsDropdownClosing(true);
-                setTimeout(() => {
+                if (filterCloseTimerRef.current) {
+                  clearTimeout(filterCloseTimerRef.current);
+                }
+                filterCloseTimerRef.current = window.setTimeout(() => {
                   setShowFilterDropdown(false);
                   setIsDropdownClosing(false);
                 }, 200);
@@ -292,7 +322,10 @@ export default function Search({
                           onClick={() => {
                             onKindChange(option.value);
                             setIsDropdownClosing(true);
-                            setTimeout(() => {
+                            if (filterCloseTimerRef.current) {
+                              clearTimeout(filterCloseTimerRef.current);
+                            }
+                            filterCloseTimerRef.current = window.setTimeout(() => {
                               setShowFilterDropdown(false);
                               setIsDropdownClosing(false);
                             }, 200);
@@ -310,6 +343,14 @@ export default function Search({
                         { value: "relevance", label: "Релевантность" },
                         { value: "score", label: "Рейтинг" },
                         { value: "title", label: "Название" },
+                        { value: "popularity", label: "Популярность" },
+                        { value: "aired_on", label: "Дата выхода" },
+                        { value: "episodes", label: "Эпизоды" },
+                        { value: "status", label: "Статус" },
+                        { value: "id", label: "ID" },
+                        { value: "created_at", label: "Дата создания" },
+                        { value: "updated_at", label: "Дата обновления" },
+                        { value: "random", label: "Случайно" },
                       ].map((option) => (
                         <button
                           key={option.value}
@@ -317,7 +358,10 @@ export default function Search({
                           onClick={() => {
                             onSortChange(option.value as SortOption);
                             setIsDropdownClosing(true);
-                            setTimeout(() => {
+                            if (filterCloseTimerRef.current) {
+                              clearTimeout(filterCloseTimerRef.current);
+                            }
+                            filterCloseTimerRef.current = window.setTimeout(() => {
                               setShowFilterDropdown(false);
                               setIsDropdownClosing(false);
                             }, 200);
@@ -338,7 +382,10 @@ export default function Search({
                           onClick={() => {
                             onGenreChange(option.value);
                             setIsDropdownClosing(true);
-                            setTimeout(() => {
+                            if (filterCloseTimerRef.current) {
+                              clearTimeout(filterCloseTimerRef.current);
+                            }
+                            filterCloseTimerRef.current = window.setTimeout(() => {
                               setShowFilterDropdown(false);
                               setIsDropdownClosing(false);
                             }, 200);
@@ -359,6 +406,9 @@ export default function Search({
                       { value: "relevance", label: "Релевантность" },
                       { value: "score", label: "Рейтинг" },
                       { value: "title", label: "Название" },
+                      { value: "id", label: "ID" },
+                      { value: "created_at", label: "Дата создания" },
+                      { value: "updated_at", label: "Дата обновления" },
                     ].map((option) => (
                       <button
                         key={option.value}
@@ -366,7 +416,10 @@ export default function Search({
                         onClick={() => {
                           onSortChange(option.value as SortOption);
                           setIsDropdownClosing(true);
-                          setTimeout(() => {
+                          if (filterCloseTimerRef.current) {
+                            clearTimeout(filterCloseTimerRef.current);
+                          }
+                          filterCloseTimerRef.current = window.setTimeout(() => {
                             setShowFilterDropdown(false);
                             setIsDropdownClosing(false);
                           }, 200);
@@ -393,7 +446,10 @@ export default function Search({
                   console.log('History item clicked:', historyQuery);
                   onHistorySelect(historyQuery);
                   setIsHistoryClosing(true);
-                  setTimeout(() => {
+                  if (historyCloseTimerRef.current) {
+                    clearTimeout(historyCloseTimerRef.current);
+                  }
+                  historyCloseTimerRef.current = window.setTimeout(() => {
                     setIsHistoryClosing(false);
                   }, 200);
                 }}
@@ -433,7 +489,19 @@ export default function Search({
                 className={styles.activeFilter}
                 onClick={() => onSortChange("relevance")}
               >
-                Сортировка: {sortBy === "score" ? "Рейтинг" : sortBy === "title" ? "Название" : "Релевантность"}
+                Сортировка: {
+                  sortBy === "score" ? "Рейтинг" :
+                  sortBy === "title" ? "Название" :
+                  sortBy === "popularity" ? "Популярность" :
+                  sortBy === "aired_on" ? "Дата выхода" :
+                  sortBy === "episodes" ? "Эпизоды" :
+                  sortBy === "status" ? "Статус" :
+                  sortBy === "id" ? "ID" :
+                  sortBy === "created_at" ? "Дата создания" :
+                  sortBy === "updated_at" ? "Дата обновления" :
+                  sortBy === "random" ? "Случайно" :
+                  "Релевантность"
+                }
                 <span className={styles.filterRemove}>×</span>
               </button>
             )}

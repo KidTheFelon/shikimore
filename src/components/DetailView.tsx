@@ -6,6 +6,9 @@ import GenreChip from "./GenreChip";
 import InfoChip from "./InfoChip";
 import VideoKindChip from "./VideoKindChip";
 import HorizontalScroll from "./HorizontalScroll";
+import ImageWithSkeleton from "./ImageWithSkeleton";
+import ReadMoreButton from "./ReadMoreButton";
+import SimilarAnime from "./SimilarAnime";
 import { getMarqueeParams } from "../utils/marquee";
 import { getInfoChipLabel, translateRole, translateRelationKind, translateVideoKind, translateExternalLink, STATUS_TEXTS, KIND_TEXTS } from "../utils/badgeTexts";
 
@@ -54,10 +57,10 @@ export default function DetailView({
   onSearchStudio,
   onSearchPublisher
 }: DetailViewProps) {
-  const [descExpanded, setDescExpanded] = useState(false);
   const [showStats, setShowStats] = useState(false);
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const statsRef = useRef<HTMLDivElement>(null);
+  const statsHoverTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -74,7 +77,31 @@ export default function DetailView({
     };
   }, [showStats]);
 
-  console.log("DetailView: render", { hasData: !!data, type, loading, error });
+  useEffect(() => {
+    return () => {
+      if (statsHoverTimeoutRef.current) {
+        clearTimeout(statsHoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleStatsMouseEnter = () => {
+    if (statsHoverTimeoutRef.current) {
+      clearTimeout(statsHoverTimeoutRef.current);
+    }
+    statsHoverTimeoutRef.current = window.setTimeout(() => {
+      setShowStats(true);
+    }, 300);
+  };
+
+  const handleStatsMouseLeave = () => {
+    if (statsHoverTimeoutRef.current) {
+      clearTimeout(statsHoverTimeoutRef.current);
+      statsHoverTimeoutRef.current = null;
+    }
+    // Не скрываем сразу при mouse leave - даем пользователю время переместить мышь в popup
+  };
+
   
   if (loading || !data) {
     return (
@@ -182,17 +209,14 @@ export default function DetailView({
       one_shot: "rgba(239, 68, 68, 1)", // красный
     };
 
-    console.log('getKindColor:', { kind, episodes, episodesAired });
 
     if (kind === "tv" && episodes && episodesAired && episodes > 0) {
       const progress = Math.min(episodesAired / episodes, 1) * 100;
       const gradient = `linear-gradient(to right, rgba(59, 130, 246, 1) 0%, rgba(59, 130, 246, 1) ${progress}%, rgba(59, 130, 246, 0.3) ${progress}%, rgba(59, 130, 246, 0.3) 100%)`;
-      console.log('TV gradient:', { progress, gradient });
       return gradient;
     }
 
     const color = kind ? colors[kind] || "var(--primary)" : "var(--primary)";
-    console.log('Regular color:', color);
     return color;
   };
 
@@ -210,13 +234,13 @@ export default function DetailView({
       <>
         <span className={styles.linkIcon}>
           {faviconUrl ? (
-            <img 
-              src={faviconUrl} 
-              alt="" 
-              style={{ width: 14, height: 14, borderRadius: 2, display: 'block' }}
+            <img
+              src={faviconUrl}
+              alt=""
               onError={(e) => {
                 (e.target as HTMLImageElement).style.display = 'none';
               }}
+              style={{ width: 14, height: 14, borderRadius: 2, display: 'block' }}
             />
           ) : null}
         </span>
@@ -248,9 +272,9 @@ export default function DetailView({
       >
         <div className={styles.relatedCardPoster}>
           {item.image?.preview ? (
-            <img 
-              src={item.image.preview} 
-              alt={item.russian || item.name} 
+            <ImageWithSkeleton
+              src={item.image.preview}
+              alt={item.russian || item.name}
               loading="lazy"
             />
           ) : (
@@ -317,11 +341,11 @@ export default function DetailView({
         <div className={styles.detailPosterContainer}>
           <div className={styles.detailPosterWrapper}>
             {data.poster_url ? (
-                <img
-                  src={data.poster_url}
-                  alt={data.title}
-                  className={styles.detailPoster}
-                />
+              <ImageWithSkeleton
+                src={data.poster_url}
+                alt={data.title}
+                className={styles.detailPoster}
+              />
             ) : (
               <div className={styles.detailPosterPlaceholder}>Нет изображения</div>
             )}
@@ -376,10 +400,12 @@ export default function DetailView({
 
           <div className={styles.detailMeta}>
             {data.score !== undefined && (
-              <div 
+              <div
                 ref={statsRef}
                 className={`${styles.detailScore} ${styles.clickable} ${showStats ? styles.active : ''}`}
                 onClick={() => setShowStats(!showStats)}
+                onMouseEnter={handleStatsMouseEnter}
+                onMouseLeave={handleStatsMouseLeave}
                 title="Показать статистику оценок"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -484,35 +510,21 @@ export default function DetailView({
 
             {data.description && (
               <div className={styles.detailHeaderDescriptionWrapper}>
-                <div 
-                  className={`${styles.detailHeaderDescription} ${descExpanded ? styles.expanded : ''}`}
-                  dangerouslySetInnerHTML={{ __html: data.description_html || data.description }}
-                  onClick={(e) => {
-                    const target = e.target as HTMLElement;
-                    const spoiler = target.closest('.b-spoiler, .b-spoiler_block, .b-spoiler_inline');
-                    if (!spoiler) return;
+                <ReadMoreButton className={styles.detailHeaderDescription}>
+                  <div
+                    dangerouslySetInnerHTML={{ __html: data.description_html || data.description }}
+                    onClick={(e) => {
+                      const target = e.target as HTMLElement;
+                      const spoiler = target.closest('.b-spoiler, .b-spoiler_block, .b-spoiler_inline');
+                      if (!spoiler) return;
 
-                    // Если кликнули по заголовку (первый элемент или с классом label)
-                    const isLabel = target.classList.contains('b-spoiler_label') || 
-                                   target.tagName === 'LABEL' ||
-                                   spoiler.firstElementChild === target ||
-                                   spoiler.firstElementChild?.contains(target);
-                    
-                    if (isLabel) {
+                      // Переключаем класс при клике на спойлер
                       spoiler.classList.toggle('is-expanded');
                       e.preventDefault();
                       e.stopPropagation();
-                    }
-                  }}
-                />
-                {data.description.length > 300 && (
-                  <button 
-                    className={styles.descriptionMoreBtn}
-                    onClick={() => setDescExpanded(!descExpanded)}
-                  >
-                    {descExpanded ? "Свернуть" : "Читать полностью..."}
-                  </button>
-                )}
+                    }}
+                  />
+                </ReadMoreButton>
               </div>
             )}
           </div>
@@ -533,7 +545,7 @@ export default function DetailView({
                 >
                   <div className={styles.characterPosterWrapper}>
                     {role.character.poster_url ? (
-                      <img
+                      <ImageWithSkeleton
                         src={role.character.poster_url}
                         alt={role.character.russian || role.character.name}
                         className={styles.characterPoster}
@@ -548,7 +560,7 @@ export default function DetailView({
                       
                       if (allRoles.length === 0) return null;
                       const roleText = allRoles[0];
-                      const badgeParams = getMarqueeParams(roleText, 120, 6); // Больше ширина и меньше ширина символа для role badge
+                      const badgeParams = getMarqueeParams(roleText, 140, 11); // Порог 13 символов
 
                       return (
                         <div className={`roleBadge ${styles.roleBadge}`} title={allRoles.join(", ")}>
@@ -565,7 +577,7 @@ export default function DetailView({
                   <div className={styles.characterInfo}>
                     {(() => {
                       const name = role.character.russian || role.character.name;
-                      const nameParams = getMarqueeParams(name, 120, 8); // Smaller container width for better scrolling
+                      const nameParams = getMarqueeParams(name, 140, 8); // Увеличил ширину для имени персонажа
                       
                       return (
                         <div className={`characterNameContainer ${nameParams.isLong ? 'hasMarquee' : ''}`}>
@@ -624,6 +636,13 @@ export default function DetailView({
           </div>
         )}
 
+        {isAnime && (
+          <SimilarAnime
+            animeId={data.id}
+            onNavigate={onNavigate}
+          />
+        )}
+
         {isAnime && animeData?.videos && animeData.videos.length > 0 && (
           <div className={styles.detailSection}>
             <h3 className={styles.detailSectionTitle}>Видео</h3>
@@ -643,9 +662,9 @@ export default function DetailView({
                   }}
                 >
                   <div className={styles.videoThumbnailContainer}>
-                    <img 
-                      src={getVideoThumbnail(video)} 
-                      alt={video.name || "Видео"} 
+                    <ImageWithSkeleton
+                      src={getVideoThumbnail(video)}
+                      alt={video.name || "Видео"}
                       className={styles.videoThumbnail}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = VIDEO_PLACEHOLDER;
@@ -686,13 +705,13 @@ export default function DetailView({
             <h3 className={styles.detailSectionTitle}>Скриншоты</h3>
             <HorizontalScroll className={styles.detailScreenshots}>
               {animeData.screenshots.map((screenshot) => (
-                <div 
-                  key={screenshot.id} 
+                <div
+                  key={screenshot.id}
                   className={`${styles.screenshotItem} ${styles.clickable}`}
                   onClick={() => setSelectedScreenshot(screenshot.original_url || screenshot.x332_url || null)}
                 >
-                  <img
-                    src={screenshot.x332_url || screenshot.original_url}
+                  <ImageWithSkeleton
+                    src={screenshot.x332_url || screenshot.original_url || ""}
                     alt="Скриншот"
                     className={styles.screenshotImage}
                     loading="lazy"

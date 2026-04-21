@@ -74,6 +74,22 @@ export interface RelatedManga {
   image?: Poster;
 }
 
+export interface SimilarAnime {
+  id?: number;
+  name?: string;
+  russian?: string;
+  kind?: string;
+  status?: string;
+  image?: SimilarAnimeImage;
+}
+
+export interface SimilarAnimeImage {
+  original?: string;
+  preview?: string;
+  x48?: string;
+  x96?: string;
+}
+
 export interface Related {
   id: number;
   anime?: RelatedAnime;
@@ -272,7 +288,18 @@ export interface Person {
 
 export type ContentItem = Anime | Manga | Character | Person;
 export type ContentType = "anime" | "manga" | "characters" | "people";
-export type SortOption = "relevance" | "score" | "title";
+export type SortOption =
+  | "relevance"
+  | "score"
+  | "title"
+  | "id"
+  | "popularity"
+  | "aired_on"
+  | "episodes"
+  | "status"
+  | "random"
+  | "created_at"
+  | "updated_at";
 
 export interface SearchResult<T> {
   items: T[];

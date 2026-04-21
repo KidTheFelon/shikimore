@@ -2316,12 +2316,12 @@
 /* Заголовок (плашка "спойлер") */
 .b-spoiler label,
 .b-spoiler .b-spoiler_label,
+.b-spoiler > span:first-child,
 .b-spoiler_block label,
 .b-spoiler_block .b-spoiler_label,
+.b-spoiler_block > span:first-child,
 .b-spoiler_inline label,
 .b-spoiler_inline .b-spoiler_label,
-.b-spoiler > span:first-child,
-.b-spoiler_block > span:first-child,
 .b-spoiler_inline > span:first-child {
   display: flex !important;
   align-items: center;
@@ -2340,12 +2340,12 @@
 
 .b-spoiler label::before,
 .b-spoiler .b-spoiler_label::before,
+.b-spoiler > span:first-child::before,
 .b-spoiler_block label::before,
 .b-spoiler_block .b-spoiler_label::before,
+.b-spoiler_block > span:first-child::before,
 .b-spoiler_inline label::before,
 .b-spoiler_inline .b-spoiler_label::before,
-.b-spoiler > span:first-child::before,
-.b-spoiler_block > span:first-child::before,
 .b-spoiler_inline > span:first-child::before {
   content: "▶";
   display: inline-block;
@@ -2373,12 +2373,12 @@
 
 .b-spoiler.is-expanded label,
 .b-spoiler.is-expanded .b-spoiler_label,
+.b-spoiler.is-expanded > span:first-child,
 .b-spoiler_block.is-expanded label,
 .b-spoiler_block.is-expanded .b-spoiler_label,
+.b-spoiler_block.is-expanded > span:first-child,
 .b-spoiler_inline.is-expanded label,
 .b-spoiler_inline.is-expanded .b-spoiler_label,
-.b-spoiler.is-expanded > span:first-child,
-.b-spoiler_block.is-expanded > span:first-child,
 .b-spoiler_inline.is-expanded > span:first-child {
   background: rgba(100, 108, 255, 0.15);
   color: var(--primary);
@@ -2389,12 +2389,12 @@
 
 .b-spoiler.is-expanded label::before,
 .b-spoiler.is-expanded .b-spoiler_label::before,
+.b-spoiler.is-expanded > span:first-child::before,
 .b-spoiler_block.is-expanded label::before,
 .b-spoiler_block.is-expanded .b-spoiler_label::before,
+.b-spoiler_block.is-expanded > span:first-child::before,
 .b-spoiler_inline.is-expanded label::before,
 .b-spoiler_inline.is-expanded .b-spoiler_label::before,
-.b-spoiler.is-expanded > span:first-child::before,
-.b-spoiler_block.is-expanded > span:first-child::before,
 .b-spoiler_inline.is-expanded > span:first-child::before {
   transform: rotate(90deg);
   opacity: 1;

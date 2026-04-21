@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import styles from "./HorizontalScroll.module.css";
 
 // Constants
-const SCROLL_AMOUNT = 600;
+const BASE_SCROLL_AMOUNT = 600;
 const ARROW_THRESHOLD = 10;
 const CACHE_UPDATE_DELAY = 1000;
 const SEPARATOR_CLASS = 'relatedSeparator';
@@ -26,6 +26,8 @@ const HorizontalScroll = ({ children, className = "" }: HorizontalScrollProps) =
     isScrolling: false
   });
 
+  const wheelTimerRef = useRef<number | null>(null);
+
   const checkScroll = useCallback(() => {
     if (scrollRef.current) {
       const { scrollLeft, scrollWidth, clientWidth } = scrollRef.current;
@@ -45,10 +47,22 @@ const HorizontalScroll = ({ children, className = "" }: HorizontalScrollProps) =
 
   const scroll = (direction: "left" | "right") => {
     if (scrollRef.current) {
+      const containerWidth = scrollRef.current.clientWidth;
+      const scrollAmount = Math.max(BASE_SCROLL_AMOUNT, containerWidth * 0.8);
       scrollRef.current.scrollBy({
-        left: direction === "left" ? -SCROLL_AMOUNT : SCROLL_AMOUNT,
+        left: direction === "left" ? -scrollAmount : scrollAmount,
         behavior: "smooth",
       });
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      scroll("left");
+    } else if (e.key === "ArrowRight") {
+      e.preventDefault();
+      scroll("right");
     }
   };
 
@@ -145,12 +159,15 @@ const HorizontalScroll = ({ children, className = "" }: HorizontalScrollProps) =
         if (shouldScrollThrough) {
           // Let the page scroll normally - don't prevent default
           cacheRef.current.isScrolling = true;
-          
+
           const resetScrolling = () => {
             cacheRef.current.isScrolling = false;
           };
-          
-          setTimeout(resetScrolling, 100);
+
+          if (wheelTimerRef.current) {
+            clearTimeout(wheelTimerRef.current);
+          }
+          wheelTimerRef.current = window.setTimeout(resetScrolling, 100);
           return;
         }
 
@@ -164,17 +181,14 @@ const HorizontalScroll = ({ children, className = "" }: HorizontalScrollProps) =
             behavior: "smooth"
           });
 
-          // Better scrolling state management
           const resetScrolling = () => {
             cacheRef.current.isScrolling = false;
           };
-          
-          // Use both timeout and RAF for more reliable reset
-          const timeoutId = setTimeout(resetScrolling, 500);
-          requestAnimationFrame(() => {
-            clearTimeout(timeoutId);
-            resetScrolling();
-          });
+
+          if (wheelTimerRef.current) {
+            clearTimeout(wheelTimerRef.current);
+          }
+          wheelTimerRef.current = window.setTimeout(resetScrolling, 100);
         }
       }
     };
@@ -186,31 +200,38 @@ const HorizontalScroll = ({ children, className = "" }: HorizontalScrollProps) =
     return () => {
       clearTimeout(resizeTimeout);
       clearTimeout(mutationTimeout);
+      if (wheelTimerRef.current) {
+        clearTimeout(wheelTimerRef.current);
+      }
       resizeObserver.disconnect();
       mutationObserver.disconnect();
       el.removeEventListener("scroll", checkScroll);
       window.removeEventListener("resize", handleResize);
       el.removeEventListener("wheel", handleWheelNative);
     };
-  }, [children, checkScroll, updateScrollCache]);
+  }, [checkScroll, updateScrollCache]);
 
   return (
     <div className={styles.scrollContainerWrapper}>
       {showLeftArrow && (
-        <button className={`${styles.scrollBtn} ${styles.scrollBtnLeft}`} onClick={() => scroll("left")} aria-label="Nazad">
+        <button className={`${styles.scrollBtn} ${styles.scrollBtnLeft}`} onClick={() => scroll("left")} aria-label="Back">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
       )}
-      <div 
-        className={`${styles.horizontalScrollContainer} ${className}`} 
+      <div
+        className={`${styles.horizontalScrollContainer} ${className}`}
         ref={scrollRef}
+        tabIndex={0}
+        onKeyDown={handleKeyDown}
+        role="region"
+        aria-label="Горизонтальная прокрутка"
       >
         {children}
       </div>
       {showRightArrow && (
-        <button className={`${styles.scrollBtn} ${styles.scrollBtnRight}`} onClick={() => scroll("right")} aria-label="Vpered">
+        <button className={`${styles.scrollBtn} ${styles.scrollBtnRight}`} onClick={() => scroll("right")} aria-label="Forward">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 18l6-6-6-6" />
           </svg>

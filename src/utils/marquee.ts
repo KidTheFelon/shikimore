@@ -1,3 +1,9 @@
+// Constants
+const DEFAULT_CHAR_WIDTH = 8.5;
+const DEFAULT_SPEED = 25;
+const MARQUEE_GAP = 32; // 2rem in pixels
+const DEFAULT_CONTAINER_WIDTH = 130;
+
 export interface MarqueeParams {
   isLong: boolean;
   style: React.CSSProperties;
@@ -12,24 +18,33 @@ export interface MarqueeParams {
  * @returns Marquee parameters object
  */
 export const getMarqueeParams = (
-  text: string, 
-  containerWidth = 130,
-  charWidth = 8.5,
-  speed = 25
+  text: string,
+  containerWidth = DEFAULT_CONTAINER_WIDTH,
+  charWidth = DEFAULT_CHAR_WIDTH,
+  speed = DEFAULT_SPEED
 ): MarqueeParams => {
+  // Validation
+  if (!text || typeof text !== 'string') {
+    return { isLong: false, style: {} };
+  }
+
+  if (containerWidth <= 0 || charWidth <= 0 || speed <= 0) {
+    return { isLong: false, style: {} };
+  }
+
   const textWidth = text.length * charWidth;
   const isLong = textWidth > containerWidth;
-  
+
   if (!isLong) {
     return { isLong: false, style: {} };
   }
 
-  const moveDistance = textWidth + 32; // gap: 2rem (32px)
+  const moveDistance = textWidth + MARQUEE_GAP;
   const totalDuration = moveDistance / speed;
-  
-  return { 
-    isLong: true, 
-    style: { "--marquee-duration": `${totalDuration}s` } as React.CSSProperties 
+
+  return {
+    isLong: true,
+    style: { "--marquee-duration": `${totalDuration}s` } as React.CSSProperties
   };
 };
 

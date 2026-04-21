@@ -18,6 +18,12 @@
   display: none; /* Chrome, Safari, Opera */
 }
 
+.horizontalScrollContainer:focus-visible {
+  outline: 2px solid var(--primary, #6366f1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 .scrollBtn {
   position: absolute;
   top: calc(50% - 20px);
@@ -38,8 +44,8 @@
 }
 
 .scrollBtn:hover {
-  background: var(--primary);
-  border-color: var(--primary);
+  background: var(--primary, #6366f1);
+  border-color: var(--primary, #6366f1);
   transform: scale(1.1);
 }
 

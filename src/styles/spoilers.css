@@ -1,0 +1,54 @@
+/* Shikimori spoilers styling */
+
+.b-spoiler,
+.b-spoiler_block,
+.b-spoiler_inline {
+  margin: 0.5rem 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.b-spoiler_label,
+.b-spoiler > label,
+.b-spoiler_block > label {
+  display: block;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: rgba(255, 255, 255, 0.05);
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  transition: background 0.2s ease, color 0.2s ease;
+  user-select: none;
+}
+
+.b-spoiler_label:hover,
+.b-spoiler > label:hover,
+.b-spoiler_block > label:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+}
+
+.b-spoiler:not(.is-expanded) .b-spoiler_content,
+.b-spoiler_block:not(.is-expanded) .b-spoiler_content,
+.b-spoiler_inline:not(.is-expanded) .b-spoiler_content {
+  display: none;
+}
+
+.b-spoiler.is-expanded .b-spoiler_content,
+.b-spoiler_block.is-expanded .b-spoiler_content,
+.b-spoiler_inline.is-expanded .b-spoiler_content {
+  display: block;
+  padding: 1rem;
+}
+
+.b-spoiler_inline {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.b-spoiler_inline .b-spoiler_content {
+  display: inline-block;
+}

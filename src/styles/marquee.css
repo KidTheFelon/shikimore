@@ -202,3 +202,27 @@
 .roleMarqueeInner.isMarquee {
   animation: marquee var(--marquee-duration, 5s) linear infinite;
 }
+
+/* Для имён сэйю */
+.voiceActorNameContainer {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.voiceActorNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+.voiceActorMarqueeInner {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.voiceActorMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
