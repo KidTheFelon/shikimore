@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { logger } from "./utils/logger";
 import Header from "./components/Header";
 import Search from "./components/Search";
 import ContentList from "./components/ContentList";
@@ -86,6 +87,7 @@ function App() {
 
   // Load initial content on startup
   useEffect(() => {
+    logger.info(`[Frontend] App started, loading initial content for ${contentType}`);
     fetchContent(contentType, "", 1, kindFilter, genreFilter, sortBy, false);
   }, [contentType]);
 
@@ -178,10 +180,12 @@ function App() {
   // Online/offline handling
   useEffect(() => {
     const handleOnline = () => {
+      logger.info("[Frontend] Connection restored");
       showToast("Соединение восстановлено", "success");
     };
 
     const handleOffline = () => {
+      logger.warn("[Frontend] Connection lost");
       showToast("Нет соединения с интернетом", "error");
     };
 
@@ -189,6 +193,7 @@ function App() {
     window.addEventListener("offline", handleOffline);
 
     if (!navigator.onLine) {
+      logger.warn("[Frontend] Starting offline");
       showToast("Нет соединения с интернетом", "error");
     }
 

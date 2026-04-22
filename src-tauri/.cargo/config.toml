@@ -1,0 +1,7 @@
+[build]
+# Ускорить incremental компиляцию
+incremental = true
+
+[env]
+# Ускорить линковку
+RUSTFLAGS = "-C link-arg=/SUBSYSTEM:WINDOWS"

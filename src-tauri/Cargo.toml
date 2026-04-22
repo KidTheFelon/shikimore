@@ -14,8 +14,23 @@ tauri-plugin-http = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 shikicrate = { path = "../shikicrate" }
-reqwest = { version = "0.13", features = ["json", "rustls"] }
+reqwest = { version = "0.13", features = ["json", "rustls", "query"] }
 image = { version = "0.25", default-features = false, features = ["webp", "jpeg", "png"] }
+log = "0.4"
+flexi_logger = "0.31"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.dev]
+opt-level = 0
+debug = false
+incremental = true
+codegen-units = 16
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true

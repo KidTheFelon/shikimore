@@ -65,6 +65,7 @@ export interface RelatedAnime {
   name?: string;
   russian?: string;
   image?: Poster;
+  aired_on?: Date;
 }
 
 export interface RelatedManga {
@@ -72,6 +73,7 @@ export interface RelatedManga {
   name?: string;
   russian?: string;
   image?: Poster;
+  aired_on?: Date;
 }
 
 export interface SimilarAnime {

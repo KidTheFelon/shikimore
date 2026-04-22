@@ -57,7 +57,9 @@ export default function ContentBadges({ item }: ContentBadgesProps) {
       {/* Episodes badge - show for anime types even if episodes is null */}
       {shouldShowEpisodes && (
         <div className={`${styles.contentCardEpisodes} ${isCompleted ? styles.completed : ''}`}>
-          {episodes
+          {episodes === 0 && episodesAired && episodesAired > 0
+            ? `${episodesAired}/0`
+            : episodes
             ? (displayedAired ? `${displayedAired}/${episodes}` : `?/${episodes}`)
             : '?'
           }

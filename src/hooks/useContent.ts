@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { handleApiError } from "../utils/api";
+import { logger } from "../utils/logger";
 import type { ContentType, ContentItem, SearchResult } from "../types";
 
 export function useContent(contentType: ContentType) {
@@ -46,7 +47,7 @@ export function useContent(contentType: ContentType) {
       };
       
       if (type === "anime") {
-        console.log("[Frontend] Calling search_anime with:", { query, page, limit, kind, genres });
+        await logger.debug(`[Frontend] search_anime: query="${query}", page=${page}, kind=${kind}, genres=${genres.join(",")}`);
         result = await invoke<SearchResult<any>>("search_anime", {
           query,
           page,
@@ -56,6 +57,7 @@ export function useContent(contentType: ContentType) {
           order: getOrderValue(),
         });
       } else if (type === "manga") {
+        await logger.debug(`[Frontend] search_manga: query="${query}", page=${page}, kind=${kind}, genres=${genres.join(",")}`);
         result = await invoke<SearchResult<any>>("search_manga", {
           query,
           page,
@@ -65,12 +67,14 @@ export function useContent(contentType: ContentType) {
           order: getOrderValue(),
         });
       } else if (type === "characters") {
+        await logger.debug(`[Frontend] search_characters: page=${page}`);
         result = await invoke<SearchResult<any>>("search_characters", {
           page,
           limit,
           ids: undefined,
         });
       } else {
+        await logger.debug(`[Frontend] search_people: query="${query}"`);
         result = await invoke<SearchResult<any>>("search_people", {
           query,
           limit,
@@ -88,10 +92,13 @@ export function useContent(contentType: ContentType) {
         }
       }
 
+      await logger.debug(`[Frontend] Fetched ${result.items.length} items for ${type} (page ${page})`);
       setHasMore(result.items.length === limit);
     } catch (err) {
       const errorMessage = handleApiError(err);
+      await logger.error(`[Frontend] API error in ${type}: ${errorMessage}`);
       if (!append && !navigator.onLine) {
+        await logger.warn(`[Frontend] Offline, using cache for ${type}`);
         try {
           const cached = localStorage.getItem(`shikimore_cache_${contentType}_${query}`);
           if (cached) {

@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { handleApiError } from "../utils/api";
+import { logger } from "../utils/logger";
 import type { ContentType, AnimeDetail, MangaDetail, CharacterDetail, ContentItem } from "../types";
 
 export function useDetail() {
@@ -72,6 +73,7 @@ export function useDetail() {
       
       const fetchDetails = async () => {
         try {
+          await logger.debug(`[Frontend] Fetching details for ${selectedItem.type} id=${selectedItem.id}`);
           let detail;
           if (selectedItem.type === "anime") {
             detail = await invoke<AnimeDetail>("get_anime_by_id", { id: selectedItem.id });
@@ -81,8 +83,10 @@ export function useDetail() {
             detail = await invoke<CharacterDetail>("get_character_details", { id: selectedItem.id });
           }
           setDetailData(detail || null);
+          await logger.debug(`[Frontend] Successfully fetched details for ${selectedItem.type} id=${selectedItem.id}`);
         } catch (err) {
           const errorMessage = handleApiError(err);
+          await logger.error(`[Frontend] Error fetching details for ${selectedItem.type} id=${selectedItem.id}: ${errorMessage}`);
           setDetailError(errorMessage);
         } finally {
           setLoadingDetail(false);

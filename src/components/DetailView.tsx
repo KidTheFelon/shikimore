@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { open as openUrl } from "@tauri-apps/plugin-shell";
 import type { AnimeDetail, MangaDetail, Video } from "../types";
 import styles from "./DetailView.module.css";
@@ -46,11 +46,11 @@ const getVideoThumbnail = (video: Video) => {
   return VIDEO_PLACEHOLDER;
 };
 
-export default function DetailView({ 
-  data, 
-  type, 
-  loading, 
-  error, 
+export default function DetailView({
+  data,
+  type,
+  loading,
+  error,
   onBack,
   onNavigate,
   onSearchGenre,
@@ -61,6 +61,122 @@ export default function DetailView({
   const [selectedScreenshot, setSelectedScreenshot] = useState<string | null>(null);
   const statsRef = useRef<HTMLDivElement>(null);
   const statsHoverTimeoutRef = useRef<number | null>(null);
+
+  // Move all useCallback before early returns to avoid hooks order issues
+  const formatDate = useCallback((date?: { year?: number; month?: number; day?: number; date?: string }) => {
+    if (!date) return null;
+    if (date.date) {
+      const parts = date.date.split("-");
+      if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+      return date.date;
+    }
+    const parts: string[] = [];
+    if (date.day) parts.push(date.day.toString().padStart(2, "0"));
+    if (date.month) parts.push(date.month.toString().padStart(2, "0"));
+    if (date.year) parts.push(date.year.toString());
+    return parts.length > 0 ? parts.join(".") : null;
+  }, []);
+
+  const formatRating = useCallback((rating?: string) => {
+    const ratings: Record<string, string> = {
+      g: "G",
+      pg: "PG",
+      pg_13: "PG-13",
+      r: "R",
+      r_plus: "R+",
+      rx: "RX",
+    };
+    return rating ? ratings[rating] || rating.toUpperCase() : null;
+  }, []);
+
+  const formatStatus = useCallback((status?: string) => {
+    return status ? STATUS_TEXTS[status] || status : null;
+  }, []);
+
+  const formatKind = useCallback((kind?: string) => {
+    return kind ? KIND_TEXTS[kind] || kind.toUpperCase() : null;
+  }, []);
+
+  const formatRelationKind = useCallback((kind: string) => {
+    return translateRelationKind(kind);
+  }, []);
+
+  const formatVideoKind = useCallback((kind?: string) => {
+    return translateVideoKind(kind);
+  }, []);
+
+  const getVideoKindColor = useCallback((kind?: string) => {
+    const colors: Record<string, { bg: string; border: string }> = {
+      pv: { bg: "rgba(139, 92, 246, 0.9)", border: "rgba(139, 92, 246, 0.3)" },
+      character_trailer: { bg: "rgba(59, 130, 246, 0.9)", border: "rgba(59, 130, 246, 0.3)" },
+      cm: { bg: "rgba(251, 146, 60, 0.9)", border: "rgba(251, 146, 60, 0.3)" },
+      op: { bg: "rgba(34, 197, 94, 0.9)", border: "rgba(34, 197, 94, 0.3)" },
+      ed: { bg: "rgba(239, 68, 68, 0.9)", border: "rgba(239, 68, 68, 0.3)" },
+      op_ed_clip: { bg: "rgba(168, 85, 247, 0.9)", border: "rgba(168, 85, 247, 0.3)" },
+      clip: { bg: "rgba(245, 158, 11, 0.9)", border: "rgba(245, 158, 11, 0.3)" },
+      other: { bg: "rgba(107, 114, 128, 0.9)", border: "rgba(107, 114, 128, 0.3)" },
+      episode_preview: { bg: "rgba(236, 72, 153, 0.9)", border: "rgba(236, 72, 153, 0.3)" },
+    };
+    return kind ? colors[kind] || colors.other : colors.other;
+  }, []);
+
+  const getKindColor = useCallback((kind?: string, episodes?: number, episodesAired?: number) => {
+    const colors: Record<string, string> = {
+      movie: "rgba(239, 68, 68, 1)",
+      ova: "rgba(139, 92, 246, 1)",
+      ona: "rgba(34, 197, 94, 1)",
+      special: "rgba(251, 146, 60, 1)",
+      tv_13: "rgba(59, 130, 246, 1)",
+      tv_24: "rgba(59, 130, 246, 1)",
+      tv_48: "rgba(59, 130, 246, 1)",
+      music: "rgba(236, 72, 153, 1)",
+      doujin: "rgba(168, 85, 247, 1)",
+      manga: "rgba(245, 158, 11, 1)",
+      manhwa: "rgba(245, 158, 11, 1)",
+      manhua: "rgba(245, 158, 11, 1)",
+      light_novel: "rgba(168, 85, 247, 1)",
+      novel: "rgba(168, 85, 247, 1)",
+      one_shot: "rgba(239, 68, 68, 1)",
+    };
+
+    if (kind === "tv" && episodes && episodesAired && episodes > 0) {
+      const progress = Math.min(episodesAired / episodes, 1) * 100;
+      const gradient = `linear-gradient(to right, rgba(59, 130, 246, 1) 0%, rgba(59, 130, 246, 1) ${progress}%, rgba(59, 130, 246, 0.3) ${progress}%, rgba(59, 130, 246, 0.3) 100%)`;
+      return gradient;
+    }
+
+    const color = kind ? colors[kind] || "var(--primary)" : "var(--primary)";
+    return color;
+  }, []);
+
+  const formatExternalLink = useCallback((kind: string, url: string) => {
+    const linkInfo = { label: translateExternalLink(kind) };
+    let faviconUrl = "";
+    try {
+      const domain = new URL(url).hostname;
+      faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
+    } catch (e) {
+      // ignore
+    }
+
+    return (
+      <>
+        <span className={styles.linkIcon}>
+          {faviconUrl ? (
+            <img
+              src={faviconUrl}
+              alt=""
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+              style={{ width: 14, height: 14, borderRadius: 2, display: 'block' }}
+            />
+          ) : null}
+        </span>
+        <span className={styles.linkLabel}>{linkInfo.label}</span>
+      </>
+    );
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -102,7 +218,7 @@ export default function DetailView({
     // Не скрываем сразу при mouse leave - даем пользователю время переместить мышь в popup
   };
 
-  
+
   if (loading || !data) {
     return (
       <div className={styles.detailView}>
@@ -132,128 +248,11 @@ export default function DetailView({
     );
   }
 
-  const formatDate = (date?: { year?: number; month?: number; day?: number; date?: string }) => {
-    if (!date) return null;
-    if (date.date) {
-      const parts = date.date.split("-");
-      if (parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
-      return date.date;
-    }
-    const parts: string[] = [];
-    if (date.day) parts.push(date.day.toString().padStart(2, "0"));
-    if (date.month) parts.push(date.month.toString().padStart(2, "0"));
-    if (date.year) parts.push(date.year.toString());
-    return parts.length > 0 ? parts.join(".") : null;
-  };
-
-  const formatRating = (rating?: string) => {
-    const ratings: Record<string, string> = {
-      g: "G",
-      pg: "PG",
-      pg_13: "PG-13",
-      r: "R",
-      r_plus: "R+",
-      rx: "RX",
-    };
-    return rating ? ratings[rating] || rating.toUpperCase() : null;
-  };
-
-  const formatStatus = (status?: string) => {
-    return status ? STATUS_TEXTS[status] || status : null;
-  };
-
-  const formatKind = (kind?: string) => {
-    return kind ? KIND_TEXTS[kind] || kind.toUpperCase() : null;
-  };
-
-  const formatRelationKind = (kind: string) => {
-    return translateRelationKind(kind);
-  };
-
-
-  const formatVideoKind = (kind?: string) => {
-    return translateVideoKind(kind);
-  };
-
-  const getVideoKindColor = (kind?: string) => {
-    const colors: Record<string, { bg: string; border: string }> = {
-      pv: { bg: "rgba(139, 92, 246, 0.9)", border: "rgba(139, 92, 246, 0.3)" }, // фиолетовый
-      character_trailer: { bg: "rgba(59, 130, 246, 0.9)", border: "rgba(59, 130, 246, 0.3)" }, // синий
-      cm: { bg: "rgba(251, 146, 60, 0.9)", border: "rgba(251, 146, 60, 0.3)" }, // оранжевый
-      op: { bg: "rgba(34, 197, 94, 0.9)", border: "rgba(34, 197, 94, 0.3)" }, // зеленый
-      ed: { bg: "rgba(239, 68, 68, 0.9)", border: "rgba(239, 68, 68, 0.3)" }, // красный
-      op_ed_clip: { bg: "rgba(168, 85, 247, 0.9)", border: "rgba(168, 85, 247, 0.3)" }, // пурпурный
-      clip: { bg: "rgba(245, 158, 11, 0.9)", border: "rgba(245, 158, 11, 0.3)" }, // желтый
-      other: { bg: "rgba(107, 114, 128, 0.9)", border: "rgba(107, 114, 128, 0.3)" }, // серый
-      episode_preview: { bg: "rgba(236, 72, 153, 0.9)", border: "rgba(236, 72, 153, 0.3)" }, // розовый
-    };
-    return kind ? colors[kind] || colors.other : colors.other;
-  };
-
-  const getKindColor = (kind?: string, episodes?: number, episodesAired?: number) => {
-    const colors: Record<string, string> = {
-      movie: "rgba(239, 68, 68, 1)", // красный
-      ova: "rgba(139, 92, 246, 1)", // фиолетовый
-      ona: "rgba(34, 197, 94, 1)", // зеленый
-      special: "rgba(251, 146, 60, 1)", // оранжевый
-      tv_13: "rgba(59, 130, 246, 1)", // синий
-      tv_24: "rgba(59, 130, 246, 1)", // синий
-      tv_48: "rgba(59, 130, 246, 1)", // синий
-      music: "rgba(236, 72, 153, 1)", // розовый
-      doujin: "rgba(168, 85, 247, 1)", // пурпурный
-      manga: "rgba(245, 158, 11, 1)", // желтый
-      manhwa: "rgba(245, 158, 11, 1)", // желтый
-      manhua: "rgba(245, 158, 11, 1)", // желтый
-      light_novel: "rgba(168, 85, 247, 1)", // пурпурный
-      novel: "rgba(168, 85, 247, 1)", // пурпурный
-      one_shot: "rgba(239, 68, 68, 1)", // красный
-    };
-
-
-    if (kind === "tv" && episodes && episodesAired && episodes > 0) {
-      const progress = Math.min(episodesAired / episodes, 1) * 100;
-      const gradient = `linear-gradient(to right, rgba(59, 130, 246, 1) 0%, rgba(59, 130, 246, 1) ${progress}%, rgba(59, 130, 246, 0.3) ${progress}%, rgba(59, 130, 246, 0.3) 100%)`;
-      return gradient;
-    }
-
-    const color = kind ? colors[kind] || "var(--primary)" : "var(--primary)";
-    return color;
-  };
-
-  const formatExternalLink = (kind: string, url: string) => {
-    const linkInfo = { label: translateExternalLink(kind) };
-    let faviconUrl = "";
-    try {
-      const domain = new URL(url).hostname;
-      faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=32`;
-    } catch (e) {
-      // ignore
-    }
-
-    return (
-      <>
-        <span className={styles.linkIcon}>
-          {faviconUrl ? (
-            <img
-              src={faviconUrl}
-              alt=""
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-              style={{ width: 14, height: 14, borderRadius: 2, display: 'block' }}
-            />
-          ) : null}
-        </span>
-        <span className={styles.linkLabel}>{linkInfo.label}</span>
-      </>
-    );
-  };
-
   const isAnime = type === "anime";
   const animeData = isAnime ? (data as AnimeDetail) : null;
   const mangaData = !isAnime ? (data as MangaDetail) : null;
 
-  
+
   const renderRelatedCard = (rel: any) => {
     const isAnimeRel = !!rel.anime;
     const item = rel.anime || rel.manga;
@@ -264,17 +263,22 @@ export default function DetailView({
       onNavigate(isAnimeRel ? "anime" : "manga", item.id);
     };
 
+    const year = item.aired_on?.year;
+    const title = item.russian || item.name || `${isAnimeRel ? 'Аниме' : 'Манга'} #${item.id}`;
+
+    console.log(`[Related] Год для ${title} (ID: ${item.id}): ${year || 'не найден'} (из GraphQL)`);
+
     return (
-      <div 
-        key={rel.id} 
+      <div
+        key={rel.id}
         className={`${styles.relatedCard} ${styles.clickable}`}
         onClick={handleClick}
       >
         <div className={styles.relatedCardPoster}>
-          {item.image?.preview ? (
+          {item.image?.main ? (
             <ImageWithSkeleton
-              src={item.image.preview}
-              alt={item.russian || item.name}
+              src={item.image.main}
+              alt={title}
               loading="lazy"
             />
           ) : (
@@ -282,11 +286,20 @@ export default function DetailView({
               {isAnimeRel ? "Аниме" : "Манга"}
             </div>
           )}
-          <div className={styles.relatedCardKindBadge}>
-            {formatRelationKind(rel.relation_kind)}
-          </div>
+          {(() => {
+            const relationText = formatRelationKind(rel.relation_kind);
+            const badgeParams = getMarqueeParams(relationText, 125, 12);
+            return (
+              <div className={`${styles.relatedCardKindBadge} ${badgeParams.isLong ? 'hasMarquee' : ''}`}>
+                <div className={`${styles.relatedCardKindBadgeInner} ${badgeParams.isLong ? 'isMarquee' : ''}`} style={badgeParams.style}>
+                  {relationText}
+                  {badgeParams.isLong && <>&nbsp;{relationText}</>}
+                </div>
+              </div>
+            );
+          })()}
         </div>
-        
+
         <div className={styles.relatedCardContent}>
           <div className={styles.relatedCardType}>
             {isAnimeRel ? (
@@ -303,8 +316,7 @@ export default function DetailView({
           </div>
 
           {(() => {
-            const title = item.russian || item.name || `${isAnimeRel ? 'Аниме' : 'Манга'} #${item.id}`;
-            const marqueeParams = getMarqueeParams(title, 150); // Related cards width
+            const marqueeParams = getMarqueeParams(title, 150);
             return (
               <div className={`relatedCardTitleContainer ${marqueeParams.isLong ? 'hasMarquee' : ''}`}>
                 <a
@@ -320,6 +332,12 @@ export default function DetailView({
               </div>
             );
           })()}
+
+          {year ? (
+            <div className={styles.relatedCardYear}>
+              {year}
+            </div>
+          ) : null}
         </div>
 
         <div className={styles.relatedCardFooter}>
@@ -602,11 +620,26 @@ export default function DetailView({
               {(() => {
                 const anime = data.related.filter(r => !!r.anime);
                 const manga = data.related.filter(r => !!r.manga);
+
+                // Сортировка по годам (от старых к новым), без года - в конце
+                const sortByYear = (a: any, b: any) => {
+                  const yearA = a.anime?.aired_on?.year ?? a.manga?.aired_on?.year;
+                  const yearB = b.anime?.aired_on?.year ?? b.manga?.aired_on?.year;
+
+                  if (!yearA && !yearB) return 0;
+                  if (!yearA) return 1;
+                  if (!yearB) return -1;
+                  return yearA - yearB;
+                };
+
+                const sortedAnime = [...anime].sort(sortByYear);
+                const sortedManga = [...manga].sort(sortByYear);
+
                 const result = [];
 
                 const isAnimeView = type === "anime";
-                const firstGroup = isAnimeView ? manga : anime;
-                const secondGroup = isAnimeView ? anime : manga;
+                const firstGroup = isAnimeView ? sortedManga : sortedAnime;
+                const secondGroup = isAnimeView ? sortedAnime : sortedManga;
                 const firstLabel = isAnimeView ? "Манга" : "Аниме";
                 const secondLabel = isAnimeView ? "Аниме" : "Манга";
                 const firstKey = isAnimeView ? "sep-manga" : "sep-anime";

@@ -11,5 +11,24 @@ export default defineConfig({
     watch: {
       ignored: ["**/src-tauri/**"],
     },
+    hmr: {
+      overlay: false,
+    },
   },
-  });
+  build: {
+    target: "esnext",
+    minify: "esbuild",
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          "react-vendor": ["react", "react-dom"],
+          "tauri-vendor": ["@tauri-apps/api", "@tauri-apps/plugin-shell"],
+        },
+      },
+    },
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom", "@tauri-apps/api"],
+  },
+});

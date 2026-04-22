@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
     "test": "vitest",
     "gen-types": "cd shikicrate && cargo run --bin gen_types",
     "test:ui": "vitest --ui"

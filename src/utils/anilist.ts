@@ -1,6 +1,10 @@
+import { invoke } from "@tauri-apps/api/core";
 import type { VoiceActor, Poster } from "../types";
 
 const ANILIST_API = "https://graphql.anilist.co";
+
+// Simple in-memory cache for AniList results
+const anilistCache = new Map<string, AniListMediaInfo>();
 
 export interface AniListAnime {
   id: number;
@@ -29,6 +33,103 @@ export interface AniListAnimeResponse {
   data: {
     Media: AniListAnime;
   };
+}
+
+export interface AniListMediaYearResponse {
+  data: {
+    Media: {
+      id: number;
+      startDate: {
+        year?: number;
+      };
+      status?: string;
+    };
+  };
+}
+
+export async function fetchMediaYear(mediaId: number, type: "ANIME" | "MANGA"): Promise<number | null> {
+  const query = `
+    query ($id: Int, $type: MediaType) {
+      Media(id: $id, type: $type) {
+        id
+        startDate {
+          year
+        }
+      }
+    }
+  `;
+
+  try {
+    const response = await fetch(ANILIST_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+      },
+      body: JSON.stringify({
+        query,
+        variables: { id: mediaId, type },
+      }),
+    });
+
+    if (!response.ok) {
+      console.error("AniList API error:", response.status);
+      return null;
+    }
+
+    const json: AniListMediaYearResponse = await response.json();
+
+    if (!json.data?.Media) {
+      return null;
+    }
+
+    return json.data.Media.startDate.year || null;
+  } catch (error) {
+    console.error("Error fetching media year from AniList:", error);
+    return null;
+  }
+}
+
+export interface AniListMediaInfo {
+  year: number | null;
+  status: string | null;
+}
+
+export async function fetchMediaInfoByName(name: string, type: "ANIME" | "MANGA"): Promise<AniListMediaInfo> {
+  const cacheKey = `${name}:${type}`;
+  
+  // Check cache first
+  if (anilistCache.has(cacheKey)) {
+    return anilistCache.get(cacheKey)!;
+  }
+
+  try {
+    const json = await invoke<Record<string, any>>("fetch_anilist_media_info", {
+      name,
+      mediaType: type,
+    });
+
+    if (!json?.data?.Page?.media?.[0]) {
+      const result = { year: null, status: null };
+      anilistCache.set(cacheKey, result);
+      return result;
+    }
+
+    const media = json.data.Page.media[0];
+    const result = {
+      year: media.startDate.year || null,
+      status: media.status || null,
+    };
+    
+    // Cache the result
+    anilistCache.set(cacheKey, result);
+    return result;
+  } catch (error) {
+    console.error("Error fetching media info from AniList by name:", error);
+    const result = { year: null, status: null };
+    anilistCache.set(cacheKey, result);
+    return result;
+  }
 }
 
 export async function fetchAnimeDetails(animeId: number): Promise<AniListAnime | null> {

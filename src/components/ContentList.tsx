@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, memo, useMemo } from "react";
 import { ErrorIcon, EmptyIcon } from "./Icons";
 import type { ContentItem } from "../types";
 import styles from "./ContentList.module.css";
@@ -12,6 +12,21 @@ import {
 } from "../utils/contentHelpers";
 import { getStatusText, getPersonRoles } from "../utils/badgeTexts";
 import { getMarqueeParams } from "../utils/marquee";
+
+// Memoized component for marquee text
+const MarqueeText = memo(({ text, width, fontSize, className }: { text: string; width: number; fontSize: number; className: string }) => {
+  const params = useMemo(() => getMarqueeParams(text, width, fontSize), [text, width, fontSize]);
+
+  return (
+    <div className={`animeTitleContainer ${params.isLong ? 'hasMarquee' : ''}`}>
+      <div className={`animeMarqueeInner ${params.isLong ? 'isMarquee' : ''}`} style={params.style}>
+        <h3 className={className}>{text}</h3>
+        {params.isLong && <h3 className={className}>&nbsp;</h3>}
+        {params.isLong && <h3 className={className}>{text}</h3>}
+      </div>
+    </div>
+  );
+});
 
 interface ContentListProps {
   items: ContentItem[];
@@ -28,7 +43,7 @@ interface ContentListProps {
   filterAnimationKey?: number;
 }
 
-export default function ContentList({
+function ContentList({
   items,
   loading,
   loadingMore,
@@ -86,32 +101,20 @@ export default function ContentList({
         <div className={styles.animeContent}>
           <div className={styles.animeHeader}>
             <div className={styles.animeTitleContainer}>
-              {getItemRussian(item) && (() => {
-                const russian = getItemRussian(item)!;
-                const params = getMarqueeParams(russian, 175, 7);
-                return (
-                  <div className={`animeTitleContainer ${params.isLong ? 'hasMarquee' : ''}`}>
-                    <div className={`animeMarqueeInner ${params.isLong ? 'isMarquee' : ''}`} style={params.style}>
-                      <h3 className={styles.animeTitleRussian}>{russian}</h3>
-                      {params.isLong && <h3 className={styles.animeTitleRussian}>&nbsp;</h3>}
-                      {params.isLong && <h3 className={styles.animeTitleRussian}>{russian}</h3>}
-                    </div>
-                  </div>
-                );
-              })()}
-              {(() => {
-                const title = getItemTitle(item);
-                const params = getMarqueeParams(title, 273, 7);
-                return (
-                  <div className={`animeTitleContainer ${params.isLong ? 'hasMarquee' : ''}`}>
-                    <div className={`animeMarqueeInner ${params.isLong ? 'isMarquee' : ''}`} style={params.style}>
-                      <h3 className={styles.animeTitleEnglish}>{title}</h3>
-                      {params.isLong && <h3 className={styles.animeTitleEnglish}>&nbsp;</h3>}
-                      {params.isLong && <h3 className={styles.animeTitleEnglish}>{title}</h3>}
-                    </div>
-                  </div>
-                );
-              })()}
+              {getItemRussian(item) && (
+                <MarqueeText
+                  text={getItemRussian(item)!}
+                  width={175}
+                  fontSize={7}
+                  className={styles.animeTitleRussian}
+                />
+              )}
+              <MarqueeText
+                text={getItemTitle(item)}
+                width={273}
+                fontSize={7}
+                className={styles.animeTitleEnglish}
+              />
             </div>
           </div>
           
@@ -215,3 +218,5 @@ export default function ContentList({
     </div>
   );
 }
+
+export default memo(ContentList);

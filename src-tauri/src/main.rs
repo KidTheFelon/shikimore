@@ -1,11 +1,29 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
-// Временно отключено для отладки
-// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod logger;
 
 use serde::{Deserialize, Serialize};
 use shikicrate::{ShikicrateClient, ShikicrateError};
 use reqwest;
 use image;
+use log::{info, error, warn, debug};
+use std::sync::Arc;
+
+// Singleton client state
+struct AppState {
+    client: Arc<ShikicrateClient>,
+}
+
+impl AppState {
+    fn new() -> Result<Self, ApiError> {
+        let client = ShikicrateClient::new()
+            .map_err(|e| ApiError::from(e))?;
+        Ok(Self {
+            client: Arc::new(client),
+        })
+    }
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 struct ApiError {
@@ -231,6 +249,7 @@ struct RelatedAnime {
     name: Option<String>,
     russian: Option<String>,
     image: Option<Poster>,
+    aired_on: Option<Date>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -239,6 +258,7 @@ struct RelatedManga {
     name: Option<String>,
     russian: Option<String>,
     image: Option<Poster>,
+    aired_on: Option<Date>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -359,6 +379,7 @@ struct MangaDetail {
 
 #[tauri::command]
 async fn search_anime(
+    state: tauri::State<'_, AppState>,
     query: String,
     page: Option<u32>,
     limit: Option<u32>,
@@ -366,23 +387,12 @@ async fn search_anime(
     genres: Option<String>,
     order: Option<String>,
 ) -> Result<SearchResult<Anime>, ApiError> {
-    println!(">>> [Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}, genres={:?}", query, page, limit, kind, genres);
+    debug!("[Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}, genres={:?}", query, page, limit, kind, genres);
     
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
+    let client = &state.client;
 
-    println!(">>> [Backend] Создание клиента...");
-    let client = match ShikicrateClient::new() {
-        Ok(c) => {
-            println!(">>> [Backend] Клиент создан успешно");
-            c
-        },
-        Err(e) => {
-            println!(">>> [Backend] Ошибка создания клиента: {:?}", e);
-            return Err(ApiError::from(e));
-        }
-    };
-    
     use shikicrate::queries::AnimeSearchParams;
     
     let params = AnimeSearchParams {
@@ -400,23 +410,23 @@ async fn search_anime(
         status: None,
     };
 
-    println!(">>> [Backend] AnimeSearchParams: genre = {:?}", params.genre);
+    debug!("[Backend] AnimeSearchParams: genre = {:?}", params.genre);
     
-    println!(">>> [Backend] Выполнение запроса к API...");
+    debug!("[Backend] Выполнение запроса к API...");
     let animes = match client.animes(params).await {
         Ok(a) => {
-            println!(">>> [Backend] Получено {} аниме", a.len());
+            debug!("[Backend] Получено {} аниме", a.len());
             a
         },
         Err(e) => {
-            println!(">>> [Backend] Ошибка запроса аниме: {:?}", e);
+            error!("[Backend] Ошибка запроса аниме: {:?}", e);
             let api_err = ApiError::from(e);
-            println!(">>> [Backend] Преобразованная ошибка: kind={}, message={}", api_err.kind, api_err.message);
+            error!("[Backend] Преобразованная ошибка: kind={}, message={}", api_err.kind, api_err.message);
             return Err(api_err);
         }
     };
     
-    println!(">>> [Backend] Преобразование данных...");
+    debug!("[Backend] Преобразование данных...");
     let anime_list: Vec<Anime> = animes
         .into_iter()
         .map(|a| Anime {
@@ -433,7 +443,7 @@ async fn search_anime(
         })
         .collect();
     
-    println!(">>> [Backend] Возврат результата: {} элементов", anime_list.len());
+    debug!("[Backend] Возврат результата: {} элементов", anime_list.len());
     Ok(SearchResult {
         items: anime_list,
         page,
@@ -443,6 +453,7 @@ async fn search_anime(
 
 #[tauri::command]
 async fn search_manga(
+    state: tauri::State<'_, AppState>,
     query: String,
     page: Option<u32>,
     limit: Option<u32>,
@@ -450,11 +461,12 @@ async fn search_manga(
     genres: Option<String>,
     order: Option<String>,
 ) -> Result<SearchResult<Manga>, ApiError> {
+    debug!("[Backend] search_manga вызвана: query='{}', page={:?}, limit={:?}, kind={:?}, genres={:?}", query, page, limit, kind, genres);
+
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
+    let client = &state.client;
 
-    let client = ShikicrateClient::new().map_err(ApiError::from)?;
-    
     use shikicrate::queries::MangaSearchParams;
     
     let params = MangaSearchParams {
@@ -469,8 +481,18 @@ async fn search_manga(
         publisher: None,
         status: None,
     };
-    
-    let mangas = client.mangas(params).await.map_err(ApiError::from)?;
+
+    debug!("[Backend] Выполнение запроса к API...");
+    let mangas = match client.mangas(params).await {
+        Ok(m) => {
+            debug!("[Backend] Получено {} манги", m.len());
+            m
+        },
+        Err(e) => {
+            error!("[Backend] Ошибка запроса манги: {:?}", e);
+            return Err(ApiError::from(e));
+        }
+    };
     
     let manga_list: Vec<Manga> = mangas
         .into_iter()
@@ -487,7 +509,8 @@ async fn search_manga(
             chapters: m.chapters,
         })
         .collect();
-    
+
+    debug!("[Backend] Возврат результата: {} элементов", manga_list.len());
     Ok(SearchResult {
         items: manga_list,
         page,
@@ -497,23 +520,36 @@ async fn search_manga(
 
 #[tauri::command]
 async fn search_characters(
+    state: tauri::State<'_, AppState>,
     page: Option<u32>,
     limit: Option<u32>,
     ids: Option<Vec<String>>,
 ) -> Result<SearchResult<Character>, ApiError> {
-    let client = ShikicrateClient::new().map_err(ApiError::from)?;
-    
+    debug!("[Backend] search_characters вызвана: page={:?}, limit={:?}, ids={:?}", page, limit, ids);
+
+    let client = &state.client;
+
     use shikicrate::queries::CharacterSearchParams;
     
     if let Some(ids) = ids {
+        debug!("[Backend] Поиск по ID: {} персонажей", ids.len());
         let params = CharacterSearchParams {
             page: None,
             limit: None,
             ids: Some(ids),
             search: None,
         };
-        
-        let characters = client.characters(params).await.map_err(ApiError::from)?;
+
+        let characters = match client.characters(params).await {
+            Ok(c) => {
+                debug!("[Backend] Получено {} персонажей по ID", c.len());
+                c
+            },
+            Err(e) => {
+                error!("[Backend] Ошибка поиска персонажей по ID: {:?}", e);
+                return Err(ApiError::from(e));
+            }
+        };
         
         let character_list: Vec<Character> = characters
             .into_iter()
@@ -541,15 +577,25 @@ async fn search_characters(
     
     let page_val = page.unwrap_or(1);
     let limit_val = limit.unwrap_or(20);
-    
+
+    debug!("[Backend] Поиск по странице: page={}, limit={}", page_val, limit_val);
     let params = CharacterSearchParams {
         page: Some(page_val as i32),
         limit: Some(limit_val as i32),
         ids: None,
         search: None,
     };
-    
-    let characters = client.characters(params).await.map_err(ApiError::from)?;
+
+    let characters = match client.characters(params).await {
+        Ok(c) => {
+            debug!("[Backend] Получено {} персонажей (страница {})", c.len(), page_val);
+            c
+        },
+        Err(e) => {
+            error!("[Backend] Ошибка поиска персонажей: {:?}", e);
+            return Err(ApiError::from(e));
+        }
+    };
     
     let character_list: Vec<Character> = characters
         .into_iter()
@@ -565,7 +611,8 @@ async fn search_characters(
             is_ranobe: c.is_ranobe,
         })
         .collect();
-    
+
+    debug!("[Backend] Возврат результата: {} персонажей", character_list.len());
     Ok(SearchResult {
         items: character_list,
         page: page_val,
@@ -574,17 +621,34 @@ async fn search_characters(
 }
 
 #[tauri::command]
-async fn get_character_details(id: i64) -> Result<CharacterDetail, ApiError> {
-    let client = ShikicrateClient::new().map_err(ApiError::from)?;
-    
-    let character = client.character_detail(id).await
-        .map_err(ApiError::from)?
-        .ok_or_else(|| ApiError {
-            kind: "not_found".to_string(),
-            message: "Персонаж не найден".to_string(),
-            retry_after: None,
-            details: Some(serde_json::json!({ "id": id })),
-        })?;
+async fn get_character_details(
+    state: tauri::State<'_, AppState>,
+    id: i64
+) -> Result<CharacterDetail, ApiError> {
+    debug!("[Backend] Вызов get_character_details (ID: {})", id);
+
+    let client = &state.client;
+
+    debug!("[Backend] Поиск персонажа по ID через API...");
+    let character = match client.character_detail(id).await {
+        Ok(Some(c)) => {
+            debug!("[Backend] Персонаж найден: {}", c.name);
+            c
+        },
+        Ok(None) => {
+            warn!("[Backend] Персонаж с ID {} не найден", id);
+            return Err(ApiError {
+                kind: "not_found".to_string(),
+                message: "Персонаж не найден".to_string(),
+                retry_after: None,
+                details: Some(serde_json::json!({ "id": id })),
+            });
+        }
+        Err(e) => {
+            error!("[Backend] Ошибка API при получении деталей персонажа: {:?}", e);
+            return Err(ApiError::from(e));
+        }
+    };
         
     Ok(CharacterDetail {
         id: character.id,
@@ -602,21 +666,33 @@ async fn get_character_details(id: i64) -> Result<CharacterDetail, ApiError> {
 
 #[tauri::command]
 async fn search_people(
+    state: tauri::State<'_, AppState>,
     query: String,
     limit: Option<u32>,
 ) -> Result<SearchResult<Person>, ApiError> {
-    let limit = limit.unwrap_or(20);
+    debug!("[Backend] search_people вызвана: query='{}', limit={:?}", query, limit);
 
-    let client = ShikicrateClient::new().map_err(ApiError::from)?;
-    
+    let limit = limit.unwrap_or(20);
+    let client = &state.client;
+
     use shikicrate::queries::PeopleSearchParams;
     
     let params = PeopleSearchParams {
         search: if query.is_empty() { None } else { Some(query) },
         limit: Some(limit as i32),
     };
-    
-    let people = client.people(params).await.map_err(ApiError::from)?;
+
+    debug!("[Backend] Выполнение запроса к API...");
+    let people = match client.people(params).await {
+        Ok(p) => {
+            debug!("[Backend] Получено {} людей", p.len());
+            p
+        },
+        Err(e) => {
+            error!("[Backend] Ошибка запроса людей: {:?}", e);
+            return Err(ApiError::from(e));
+        }
+    };
     
     let person_list: Vec<Person> = people
         .into_iter()
@@ -632,7 +708,8 @@ async fn search_people(
             website: p.website,
         })
         .collect();
-    
+
+    debug!("[Backend] Возврат результата: {} людей", person_list.len());
     Ok(SearchResult {
         items: person_list,
         page: 1,
@@ -759,12 +836,14 @@ fn convert_related(related: shikicrate::types::Related) -> Related {
             name: a.name,
             russian: a.russian,
             image: a.poster.map(convert_poster),
+            aired_on: convert_date(a.aired_on),
         }),
         manga: related.manga.map(|m| RelatedManga {
             id: m.id,
             name: m.name,
             russian: m.russian,
             image: m.poster.map(convert_poster),
+            aired_on: convert_date(m.aired_on),
         }),
         relation_kind: related.relation_kind,
         relation_text: related.relation_text,
@@ -806,22 +885,18 @@ fn convert_status_stat(stat: shikicrate::types::StatusStat) -> StatusStat {
 }
 
 #[tauri::command]
-async fn get_anime_by_id(id: i64) -> Result<AnimeDetail, ApiError> {
-    println!("--- [Backend] Вызов get_anime_by_id (ID: {}) ---", id);
-    let client = match ShikicrateClient::new() {
-        Ok(c) => c,
-        Err(e) => {
-            println!("[Backend] Ошибка создания клиента: {:?}", e);
-            return Err(ApiError::from(e));
-        }
-    };
-    
+async fn get_anime_by_id(
+    state: tauri::State<'_, AppState>,
+    id: i64
+) -> Result<AnimeDetail, ApiError> {
+    let client = &state.client;
+
     // Используем выделенный метод для получения деталей
-    println!("[Backend] Поиск аниме по ID через API...");
+    debug!("[Backend] Поиск аниме по ID через API...");
     let anime = match client.anime_detail(id).await {
         Ok(Some(a)) => a,
         Ok(None) => {
-            println!("[Backend] Аниме с ID {} не найдено", id);
+            warn!("[Backend] Аниме с ID {} не найдено", id);
             return Err(ApiError {
                 kind: "not_found".to_string(),
                 message: format!("Аниме с ID {} не найдено.", id),
@@ -830,12 +905,12 @@ async fn get_anime_by_id(id: i64) -> Result<AnimeDetail, ApiError> {
             });
         }
         Err(e) => {
-            println!("[Backend] Ошибка API при получении деталей аниме: {:?}", e);
+            error!("[Backend] Ошибка API при получении деталей аниме: {:?}", e);
             return Err(ApiError::from(e));
         }
     };
     
-    println!("[Backend] Аниме найдено: {}. Преобразование данных...", anime.name);
+    debug!("[Backend] Аниме найдено: {}. Преобразование данных...", anime.name);
     Ok(AnimeDetail {
         id: anime.id,
         mal_id: anime.mal_id,
@@ -879,22 +954,18 @@ async fn get_anime_by_id(id: i64) -> Result<AnimeDetail, ApiError> {
 }
 
 #[tauri::command]
-async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
-    println!("--- [Backend] Вызов get_manga_by_id (ID: {}) ---", id);
-    let client = match ShikicrateClient::new() {
-        Ok(c) => c,
-        Err(e) => {
-            println!("[Backend] Ошибка создания клиента: {:?}", e);
-            return Err(ApiError::from(e));
-        }
-    };
-    
+async fn get_manga_by_id(
+    state: tauri::State<'_, AppState>,
+    id: i64
+) -> Result<MangaDetail, ApiError> {
+    let client = &state.client;
+
     // Используем выделенный метод для получения деталей
-    println!("[Backend] Поиск манги по ID через API...");
+    debug!("[Backend] Поиск манги по ID через API...");
     let manga = match client.manga_detail(id).await {
         Ok(Some(m)) => m,
         Ok(None) => {
-            println!("[Backend] Манга с ID {} не найдена", id);
+            warn!("[Backend] Манга с ID {} не найдена", id);
             return Err(ApiError {
                 kind: "not_found".to_string(),
                 message: format!("Манга с ID {} не найдена.", id),
@@ -903,12 +974,12 @@ async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
             });
         }
         Err(e) => {
-            println!("[Backend] Ошибка API при получении деталей манги: {:?}", e);
+            error!("[Backend] Ошибка API при получении деталей манги: {:?}", e);
             return Err(ApiError::from(e));
         }
     };
     
-    println!("[Backend] Манга найдена: {}. Преобразование данных...", manga.name);
+    debug!("[Backend] Манга найдена: {}. Преобразование данных...", manga.name);
     Ok(MangaDetail {
         id: manga.id,
         mal_id: manga.mal_id,
@@ -944,33 +1015,80 @@ async fn get_manga_by_id(id: i64) -> Result<MangaDetail, ApiError> {
 }
 
 #[tauri::command]
-async fn get_similar_anime(id: i64) -> Result<Vec<shikicrate::SimilarAnime>, ApiError> {
-    println!("--- [Backend] Вызов get_similar_anime (ID: {}) ---", id);
-    let client = match ShikicrateClient::new() {
-        Ok(c) => c,
-        Err(e) => {
-            println!("[Backend] Ошибка создания клиента: {:?}", e);
-            return Err(ApiError::from(e));
-        }
-    };
+async fn get_similar_anime(
+    state: tauri::State<'_, AppState>,
+    id: i64
+) -> Result<Vec<shikicrate::SimilarAnime>, ApiError> {
+    let client = &state.client;
 
     let similar = client.similar_anime(id).await.map_err(ApiError::from)?;
 
-    println!("[Backend] Получено {} похожих аниме", similar.len());
+    debug!("[Backend] Получено {} похожих аниме", similar.len());
 
     Ok(similar)
 }
 
 #[tauri::command]
-async fn get_accent_color(url: String) -> Result<String, String> {
-    let bytes = reqwest::get(&url)
-        .await
-        .map_err(|e| e.to_string())?
-        .bytes()
-        .await
-        .map_err(|e| e.to_string())?;
+async fn get_related_anime(
+    state: tauri::State<'_, AppState>,
+    id: i64
+) -> Result<Vec<shikicrate::Related>, ApiError> {
+    let client = &state.client;
 
-    let img = image::load_from_memory(&bytes).map_err(|e| e.to_string())?;
+    let related = client.related_anime(id).await.map_err(ApiError::from)?;
+
+    debug!("[Backend] Получено {} связанных аниме", related.len());
+
+    Ok(related)
+}
+
+#[tauri::command]
+async fn get_related_manga(
+    state: tauri::State<'_, AppState>,
+    id: i64
+) -> Result<Vec<shikicrate::Related>, ApiError> {
+    let client = &state.client;
+
+    let related = client.related_manga(id).await.map_err(ApiError::from)?;
+
+    debug!("[Backend] Получено {} связанных манги", related.len());
+
+    Ok(related)
+}
+
+#[tauri::command]
+async fn get_accent_color(url: String) -> Result<String, String> {
+    debug!("[Backend] get_accent_color вызвана: url='{}'", url);
+
+    // Try to use preview/x48 version for better performance
+    let optimized_url = url
+        .replace("/original/", "/x48/")
+        .replace("/preview/", "/x48/");
+
+    let bytes = match reqwest::get(&optimized_url).await {
+        Ok(resp) => match resp.bytes().await {
+            Ok(b) => {
+                debug!("[Backend] Загружено {} байт изображения", b.len());
+                b
+            },
+            Err(e) => {
+                error!("[Backend] Ошибка чтения байтов: {}", e);
+                return Err(e.to_string());
+            }
+        },
+        Err(e) => {
+            error!("[Backend] Ошибка загрузки изображения: {}", e);
+            return Err(e.to_string());
+        }
+    };
+
+    let img = match image::load_from_memory(&bytes) {
+        Ok(i) => i,
+        Err(e) => {
+            error!("[Backend] Ошибка загрузки изображения из памяти: {}", e);
+            return Err(e.to_string());
+        }
+    };
     let img = img.thumbnail(10, 10);
     let rgb = img.to_rgb8();
 
@@ -990,23 +1108,91 @@ async fn get_accent_color(url: String) -> Result<String, String> {
     }
 
     if count == 0 {
+        debug!("[Backend] Не найдено подходящих пикселей, используем дефолтный цвет");
         return Ok("rgba(180, 160, 120, 0.9)".to_string());
     }
 
     let factor = 0.8;
-    Ok(format!(
+    let color = format!(
         "rgba({}, {}, {}, 0.9)",
         ((r / count) as f32 * factor) as u8,
         ((g / count) as f32 * factor) as u8,
         ((b / count) as f32 * factor) as u8
-    ))
+    );
+    debug!("[Backend] Вычислен акцентный цвет: {}", color);
+    Ok(color)
+}
+
+#[tauri::command]
+async fn fetch_anilist_media_info(name: String, media_type: String) -> Result<serde_json::Value, String> {
+    let client = reqwest::Client::new();
+    let query = r#"
+        query ($search: String, $type: MediaType) {
+          Page(page: 1, perPage: 1) {
+            media(search: $search, type: $type) {
+              id
+              title {
+                romaji
+                english
+                native
+              }
+              startDate {
+                year
+              }
+              status
+            }
+          }
+        }
+    "#;
+
+    let response = client
+        .post("https://graphql.anilist.co")
+        .header("Content-Type", "application/json")
+        .header("Accept", "application/json")
+        .json(&serde_json::json!({
+            "query": query,
+            "variables": {
+                "search": name,
+                "type": media_type
+            }
+        }))
+        .send()
+        .await
+        .map_err(|e| format!("AniList request failed: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("AniList API error: {}", response.status()));
+    }
+
+    let json: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse AniList response: {}", e))?;
+
+    Ok(json)
 }
 
 fn main() {
-    println!("Запуск приложения Shikimore...");
+    if let Err(e) = logger::init_logger() {
+        eprintln!("Failed to initialize logger: {}", e);
+    }
+    info!("Запуск приложения Shikimore...");
+
+    let app_state = match AppState::new() {
+        Ok(state) => {
+            info!("HTTP клиент инициализирован");
+            state
+        },
+        Err(e) => {
+            error!("Не удалось инициализировать HTTP клиент: {}", e);
+            std::process::exit(1);
+        }
+    };
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
+        .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             search_anime,
             search_manga,
@@ -1016,10 +1202,14 @@ fn main() {
             get_manga_by_id,
             get_character_details,
             get_accent_color,
-            get_similar_anime
+            get_similar_anime,
+            get_related_anime,
+            get_related_manga,
+            fetch_anilist_media_info,
+            logger::log_message
         ])
         .setup(|_app| {
-            println!("Tauri приложение инициализировано");
+            info!("Tauri приложение инициализировано");
             Ok(())
         })
         .run(tauri::generate_context!())
