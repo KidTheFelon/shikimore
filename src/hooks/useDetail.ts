@@ -11,52 +11,56 @@ export function useDetail() {
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const handleContentClick = useCallback((item: ContentItem) => {
-    const isAnime = "episodes" in item;
-    const isManga = ("volumes" in item || "chapters" in item) && !isAnime;
-    const isCharacter = "name" in item && !isAnime && !isManga && (("is_anime" in item) || ("is_manga" in item) || ("is_ranobe" in item));
-    
-    if (isAnime || isManga || isCharacter) {
-      const type = isAnime ? "anime" : isManga ? "manga" : "characters";
-      
-      if (isAnime) {
-        const basicDetail: AnimeDetail = {
-          id: item.id,
-          title: (item as any).title,
-          url: (item as any).url,
-          poster_url: (item as any).poster_url,
-          description: (item as any).description,
-          score: (item as any).score,
-          kind: (item as any).kind,
-          status: (item as any).status,
-        } as AnimeDetail;
-        setDetailData(basicDetail);
-      } else if (isManga) {
-        const basicDetail: MangaDetail = {
-          id: item.id,
-          title: (item as any).title,
-          url: (item as any).url,
-          poster_url: (item as any).poster_url,
-          description: (item as any).description,
-          score: (item as any).score,
-          kind: (item as any).kind,
-          status: (item as any).status,
-        } as MangaDetail;
-        setDetailData(basicDetail);
-      } else {
-        const basicDetail: CharacterDetail = {
-          id: item.id,
-          name: (item as any).name,
-          russian: (item as any).russian,
-          url: (item as any).url,
-          poster_url: (item as any).poster_url,
-          description: (item as any).description,
-          synonyms: [],
-          character_roles: [],
-        } as CharacterDetail;
-        setDetailData(basicDetail);
+    try {
+      const isAnime = "episodes" in item;
+      const isManga = ("volumes" in item || "chapters" in item) && !isAnime;
+      const isCharacter = "name" in item && !isAnime && !isManga && (("is_anime" in item) || ("is_manga" in item) || ("is_ranobe" in item));
+
+      if (isAnime || isManga || isCharacter) {
+        const type = isAnime ? "anime" : isManga ? "manga" : "characters";
+
+        if (isAnime) {
+          const basicDetail: AnimeDetail = {
+            id: item.id,
+            title: (item as any).title,
+            url: (item as any).url,
+            poster_url: (item as any).poster_url,
+            description: (item as any).description,
+            score: (item as any).score,
+            kind: (item as any).kind,
+            status: (item as any).status,
+          } as AnimeDetail;
+          setDetailData(basicDetail);
+        } else if (isManga) {
+          const basicDetail: MangaDetail = {
+            id: item.id,
+            title: (item as any).title,
+            url: (item as any).url,
+            poster_url: (item as any).poster_url,
+            description: (item as any).description,
+            score: (item as any).score,
+            kind: (item as any).kind,
+            status: (item as any).status,
+          } as MangaDetail;
+          setDetailData(basicDetail);
+        } else {
+          const basicDetail: CharacterDetail = {
+            id: item.id,
+            name: (item as any).name,
+            russian: (item as any).russian,
+            url: (item as any).url,
+            poster_url: (item as any).poster_url,
+            description: (item as any).description,
+            synonyms: [],
+            character_roles: [],
+          } as CharacterDetail;
+          setDetailData(basicDetail);
+        }
+
+        setSelectedItem({ type, id: item.id });
       }
-      
-      setSelectedItem({ type, id: item.id });
+    } catch (err) {
+      logger.error(`[useDetail] Error in handleContentClick: ${err}`);
     }
   }, []);
 

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod logger;
+mod text_cache;
 
 use serde::{Deserialize, Serialize};
 use shikicrate::{ShikicrateClient, ShikicrateError};
@@ -9,23 +10,192 @@ use reqwest;
 use image;
 use log::{info, error, warn, debug};
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use std::path::PathBuf;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::fs;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+use tauri_plugin_deep_link::DeepLinkExt;
+use thiserror::Error;
+use base64::Engine;
+
+// Rate limit: 0.5 requests per second (2000ms between requests)
+const RATE_LIMIT_DELAY: Duration = Duration::from_millis(2000);
+
+// Rate limit for accent color extraction: 50ms between requests
+const ACCENT_COLOR_RATE_LIMIT_DELAY: Duration = Duration::from_millis(50);
+
+// Image cache TTL: 30 days
+const IMAGE_CACHE_TTL_SECONDS: i64 = 30 * 24 * 60 * 60;
+
+fn get_env_var(key: &str) -> Result<String, ApiError> {
+    std::env::var(key).map_err(|_| ApiError {
+        kind: "config".to_string(),
+        message: format!("Environment variable {} not set", key),
+        retry_after: None,
+        details: None,
+    })
+}
 
 // Singleton client state
 struct AppState {
     client: Arc<ShikicrateClient>,
+    http_client: Arc<reqwest::Client>,
+    last_rest_request: Arc<Mutex<Instant>>,
+    last_accent_color_request: Arc<Mutex<Instant>>,
+    user_id: Arc<Mutex<Option<i64>>>,
+    text_cache: Arc<text_cache::TextCache>,
 }
 
 impl AppState {
     fn new() -> Result<Self, ApiError> {
         let client = ShikicrateClient::new()
             .map_err(|e| ApiError::from(e))?;
+        
+        let http_client = reqwest::Client::builder()
+            .user_agent("Shikimore")
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| ApiError {
+                kind: "http".to_string(),
+                message: format!("Failed to create HTTP client: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+        
+        let db_path = text_cache::get_cache_db_path()
+            .map_err(|e| ApiError {
+                kind: "storage".to_string(),
+                message: format!("Failed to get cache db path: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+        
+        let text_cache = text_cache::TextCache::new(db_path)
+            .map_err(|e| ApiError {
+                kind: "storage".to_string(),
+                message: format!("Failed to initialize text cache: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+        
         Ok(Self {
             client: Arc::new(client),
+            http_client: Arc::new(http_client),
+            last_rest_request: Arc::new(Mutex::new(Instant::now() - RATE_LIMIT_DELAY)),
+            last_accent_color_request: Arc::new(Mutex::new(Instant::now() - ACCENT_COLOR_RATE_LIMIT_DELAY)),
+            user_id: Arc::new(Mutex::new(None)),
+            text_cache: Arc::new(text_cache),
         })
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+async fn wait_for_rate_limit(last_request: &Arc<Mutex<Instant>>, delay: Duration) {
+    let mut last = last_request.lock().await;
+    let elapsed = last.elapsed();
+    if elapsed < delay {
+        let wait_time = delay - elapsed;
+        drop(last);
+        tokio::time::sleep(wait_time).await;
+        let mut last = last_request.lock().await;
+        *last = Instant::now();
+    } else {
+        *last = Instant::now();
+    }
+}
+
+async fn get_user_id_cached(
+    state: &tauri::State<'_, AppState>
+) -> Result<i64, ApiError> {
+    // Check cache first
+    {
+        let cached = state.user_id.lock().await;
+        if let Some(id) = *cached {
+            return Ok(id);
+        }
+    }
+
+    // Fetch from API
+    let auth_data = load_auth_data()?
+        .ok_or_else(|| ApiError {
+            kind: "auth".to_string(),
+            message: "Not authenticated".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+
+    let client = state.http_client.clone();
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+    let response = client
+        .get("https://shikimori.one/api/users/whoami")
+        .header("User-Agent", "Shikimore")
+        .header("Authorization", &format!("Bearer {}", auth_data.access_token))
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to get user info: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let body = response.text().await.unwrap_or_default();
+
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)),
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to get user info: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+
+    let user_info: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| ApiError {
+            kind: "serialization".to_string(),
+            message: format!("Failed to parse user info: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    let user_id = user_info.get("id")
+        .and_then(|v| v.as_i64())
+        .ok_or_else(|| ApiError {
+            kind: "serialization".to_string(),
+            message: "Failed to get user id".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+
+    // Cache the user_id
+    {
+        let mut cached = state.user_id.lock().await;
+        *cached = Some(user_id);
+    }
+
+    Ok(user_id)
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Error)]
+#[error("{kind}: {message}")]
 struct ApiError {
     kind: String,
     message: String,
@@ -33,13 +203,109 @@ struct ApiError {
     details: Option<serde_json::Value>,
 }
 
-impl std::fmt::Display for ApiError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.kind, self.message)
-    }
+// OAuth types
+#[derive(Debug, Serialize, Deserialize)]
+struct OAuthTokenResponse {
+    access_token: String,
+    refresh_token: String,
+    created_at: i64,
+    expires_in: i64,
+    token_type: String,
 }
 
-impl std::error::Error for ApiError {}
+#[derive(Serialize, Deserialize)]
+struct UserInfo {
+    id: i64,
+    nickname: String,
+    avatar: String,
+    url: String,
+    image: Option<UserImage>,
+    rates_anime_stats: Option<UserStats>,
+    rates_manga_stats: Option<UserStats>,
+    #[serde(rename = "sex")]
+    gender: Option<String>,
+    #[serde(rename = "full_years")]
+    age: Option<i32>,
+    #[serde(rename = "website")]
+    website: Option<String>,
+    #[serde(rename = "about")]
+    about: Option<String>,
+    #[serde(rename = "show_comments")]
+    show_comments: Option<bool>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct UserStats {
+    completed: i32,
+    dropped: i32,
+    on_hold: i32,
+    planned: i32,
+    watching: i32,
+}
+
+fn deserialize_score<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::Deserialize;
+    
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum ScoreValue {
+        String(String),
+        Number(i64),
+        Float(f64),
+    }
+    
+    let value = Option::<ScoreValue>::deserialize(deserializer)?;
+    Ok(value.map(|v| match v {
+        ScoreValue::String(s) => s,
+        ScoreValue::Number(n) => n.to_string(),
+        ScoreValue::Float(f) => f.to_string(),
+    }))
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct UserRate {
+    id: i64,
+    #[serde(deserialize_with = "deserialize_score")]
+    score: Option<String>,
+    status: String,
+    text: Option<String>,
+    text_html: Option<String>,
+    rewatches: Option<i32>,
+    episodes: Option<i32>,
+    volumes: Option<i32>,
+    chapters: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    anime: Option<Anime>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    manga: Option<Manga>,
+}
+
+// Simplified UserRate for API responses without nested objects
+#[derive(Serialize, Deserialize, Debug)]
+struct UserRateSimple {
+    id: i64,
+    #[serde(deserialize_with = "deserialize_score")]
+    score: Option<String>,
+    status: String,
+    text: Option<String>,
+    text_html: Option<String>,
+    rewatches: Option<i32>,
+    episodes: Option<i32>,
+    volumes: Option<i32>,
+    chapters: Option<i32>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UserImage {
+    original: Option<String>,
+    preview: Option<String>,
+    x160: Option<String>,
+    x80: Option<String>,
+    x48: Option<String>,
+}
 
 impl From<ShikicrateError> for ApiError {
     fn from(err: ShikicrateError) -> Self {
@@ -98,27 +364,40 @@ impl From<ShikicrateError> for ApiError {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+struct Date {
+    year: Option<i32>,
+    month: Option<i32>,
+    day: Option<i32>,
+    date: Option<String>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct Anime {
     id: i64,
+    #[serde(alias = "name")]
     title: String,
     russian: Option<String>,
     url: Option<String>,
     poster_url: Option<String>,
-    score: Option<f64>,
+    #[serde(deserialize_with = "deserialize_score")]
+    score: Option<String>,
     kind: Option<String>,
     status: Option<String>,
     episodes: Option<i32>,
     episodes_aired: Option<i32>,
+    aired_on: Option<Date>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Manga {
     id: i64,
+    #[serde(alias = "name")]
     title: String,
     russian: Option<String>,
     url: Option<String>,
     poster_url: Option<String>,
-    score: Option<f64>,
+    #[serde(deserialize_with = "deserialize_score")]
+    score: Option<String>,
     kind: Option<String>,
     status: Option<String>,
     volumes: Option<i32>,
@@ -178,14 +457,6 @@ struct SearchResult<T> {
     items: Vec<T>,
     page: u32,
     limit: u32,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Date {
-    year: Option<i32>,
-    month: Option<i32>,
-    day: Option<i32>,
-    date: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -377,6 +648,1022 @@ struct MangaDetail {
 }
 
 
+// OAuth commands
+#[tauri::command]
+async fn oauth_authorize() -> Result<String, ApiError> {
+    let client_id = get_env_var("OAUTH_CLIENT_ID")?;
+    let redirect_uri = get_env_var("OAUTH_REDIRECT_URI")?;
+    
+    let auth_url = format!(
+        "https://shikimori.one/oauth/authorize?client_id={}&redirect_uri={}&response_type=code&scope=",
+        client_id,
+        urlencoding::encode(&redirect_uri)
+    );
+    
+    info!("[OAuth] Authorization URL generated");
+    Ok(auth_url)
+}
+
+#[tauri::command]
+async fn open_oauth_window(app: tauri::AppHandle) -> Result<(), ApiError> {
+    let client_id = get_env_var("OAUTH_CLIENT_ID")?;
+    let redirect_uri = get_env_var("OAUTH_REDIRECT_URI")?;
+    
+    let auth_url = format!(
+        "https://shikimori.one/oauth/authorize?client_id={}&redirect_uri={}&response_type=code&scope=",
+        client_id,
+        urlencoding::encode(&redirect_uri)
+    );
+    
+    info!("[OAuth] Opening OAuth window with URL: {}", auth_url);
+    
+    // Создаём новое окно для OAuth
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        "oauth-window",
+        tauri::WebviewUrl::External(auth_url.parse().unwrap())
+    )
+    .title("Shikimori Authorization")
+    .inner_size(800.0, 600.0)
+    .resizable(true)
+    .build()
+    .map_err(|e| ApiError {
+        kind: "window".to_string(),
+        message: format!("Failed to create OAuth window: {}", e),
+        retry_after: None,
+        details: None,
+    })?;
+    
+    Ok(())
+}
+
+#[derive(Serialize, Deserialize)]
+struct AuthData {
+    access_token: String,
+    refresh_token: String,
+    token_expires_at: i64,
+}
+
+fn get_auth_file_path() -> Result<PathBuf, ApiError> {
+    let mut path = if cfg!(target_os = "windows") {
+        let appdata = std::env::var("APPDATA")
+            .map_err(|e| ApiError {
+                kind: "storage".to_string(),
+                message: format!("Failed to get APPDATA: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+        PathBuf::from(appdata)
+    } else if cfg!(target_os = "macos") {
+        let home = std::env::var("HOME")
+            .map_err(|e| ApiError {
+                kind: "storage".to_string(),
+                message: format!("Failed to get HOME: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+        PathBuf::from(home).join("Library/Application Support")
+    } else {
+        // Linux and others
+        let home = std::env::var("HOME")
+            .map_err(|e| ApiError {
+                kind: "storage".to_string(),
+                message: format!("Failed to get HOME: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+        PathBuf::from(home).join(".local/share")
+    };
+    
+    path.push("Shikimore");
+    
+    // Create directory if it doesn't exist
+    std::fs::create_dir_all(&path)
+        .map_err(|e| ApiError {
+            kind: "storage".to_string(),
+            message: format!("Failed to create auth directory: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    
+    path.push("auth.json");
+    Ok(path)
+}
+
+fn save_auth_data(data: &AuthData) -> Result<(), ApiError> {
+    let path = get_auth_file_path()?;
+    let json = serde_json::to_string_pretty(data)
+        .map_err(|e| ApiError {
+            kind: "storage".to_string(),
+            message: format!("Failed to serialize auth data: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    std::fs::write(&path, json)
+        .map_err(|e| ApiError {
+            kind: "storage".to_string(),
+            message: format!("Failed to write auth file: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    Ok(())
+}
+
+fn load_auth_data() -> Result<Option<AuthData>, ApiError> {
+    let path = get_auth_file_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let json = std::fs::read_to_string(&path)
+        .map_err(|e| ApiError {
+            kind: "storage".to_string(),
+            message: format!("Failed to read auth file: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    let data: AuthData = serde_json::from_str(&json)
+        .map_err(|e| ApiError {
+            kind: "storage".to_string(),
+            message: format!("Failed to parse auth file: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    Ok(Some(data))
+}
+
+fn delete_auth_data() -> Result<(), ApiError> {
+    let path = get_auth_file_path()?;
+    if path.exists() {
+        std::fs::remove_file(&path)
+            .map_err(|e| ApiError {
+                kind: "storage".to_string(),
+                message: format!("Failed to delete auth file: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+async fn oauth_callback(code: String, state: tauri::State<'_, AppState>) -> Result<OAuthTokenResponse, ApiError> {
+    let client = state.http_client.clone();
+    let client_id = get_env_var("OAUTH_CLIENT_ID")?;
+    let client_secret = get_env_var("OAUTH_CLIENT_SECRET")?;
+    let redirect_uri = get_env_var("OAUTH_REDIRECT_URI")?;
+    
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+    
+    let form_data = [
+        ("grant_type", "authorization_code"),
+        ("client_id", &client_id),
+        ("client_secret", &client_secret),
+        ("code", &code),
+        ("redirect_uri", &redirect_uri),
+    ];
+    
+    let body = form_data.iter()
+        .map(|(k, v)| format!("{}={}", k, urlencoding::encode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    
+    info!("[OAuth] Sending token request to https://shikimori.one/oauth/token");
+    
+    let response = client
+        .post("https://shikimori.one/oauth/token")
+        .header("User-Agent", "Shikimore")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| {
+            error!("[OAuth] HTTP request failed: {}", e);
+            ApiError {
+                kind: "http".to_string(),
+                message: format!("Failed to get token: {}", e),
+                retry_after: None,
+                details: Some(serde_json::json!({
+                    "url": "https://shikimori.one/oauth/token"
+                })),
+            }
+        })?;
+    
+    if !response.status().is_success() {
+        let status = response.status();
+        
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        
+        let body = response.text().await.unwrap_or_default();
+        
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)), // Default to 60 seconds if not provided
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+        
+        return Err(ApiError {
+            kind: "oauth".to_string(),
+            message: format!("OAuth token request failed: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+    
+    let token_response: OAuthTokenResponse = response
+        .json()
+        .await
+        .map_err(|e| ApiError {
+            kind: "serialization".to_string(),
+            message: format!("Failed to parse token response: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    
+    // Сохраняем токен в файл
+    let auth_data = AuthData {
+        access_token: token_response.access_token.clone(),
+        refresh_token: token_response.refresh_token.clone(),
+        token_expires_at: token_response.created_at + token_response.expires_in,
+    };
+    save_auth_data(&auth_data)?;
+    
+    info!("[OAuth] Token received and saved");
+    Ok(token_response)
+}
+
+#[tauri::command]
+async fn oauth_refresh(state: tauri::State<'_, AppState>) -> Result<OAuthTokenResponse, ApiError> {
+    let auth_data = load_auth_data()?
+        .ok_or_else(|| ApiError {
+            kind: "auth".to_string(),
+            message: "No auth data found".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+    
+    let client = state.http_client.clone();
+    let client_id = get_env_var("OAUTH_CLIENT_ID")?;
+    let client_secret = get_env_var("OAUTH_CLIENT_SECRET")?;
+    
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+    
+    let form_data = [
+        ("grant_type", "refresh_token"),
+        ("client_id", &client_id),
+        ("client_secret", &client_secret),
+        ("refresh_token", &auth_data.refresh_token),
+    ];
+    
+    let body = form_data.iter()
+        .map(|(k, v)| format!("{}={}", k, urlencoding::encode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    
+    let response = client
+        .post("https://shikimori.one/oauth/token")
+        .header("User-Agent", "Shikimore")
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to refresh token: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    
+    if !response.status().is_success() {
+        let status = response.status();
+        
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        
+        let body = response.text().await.unwrap_or_default();
+        
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)), // Default to 60 seconds if not provided
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+        
+        return Err(ApiError {
+            kind: "oauth".to_string(),
+            message: format!("OAuth refresh failed: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+    
+    let token_response: OAuthTokenResponse = response
+        .json()
+        .await
+        .map_err(|e| ApiError {
+            kind: "serialization".to_string(),
+            message: format!("Failed to parse refresh response: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+    
+    // Обновляем токены в файле
+    let new_auth_data = AuthData {
+        access_token: token_response.access_token.clone(),
+        refresh_token: token_response.refresh_token.clone(),
+        token_expires_at: token_response.created_at + token_response.expires_in,
+    };
+    save_auth_data(&new_auth_data)?;
+    
+    info!("[OAuth] Token refreshed");
+    Ok(token_response)
+}
+
+#[tauri::command]
+async fn get_user_info(state: tauri::State<'_, AppState>) -> Result<UserInfo, ApiError> {
+    let auth_data = load_auth_data()?
+        .ok_or_else(|| ApiError {
+            kind: "auth".to_string(),
+            message: "Not authenticated".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+
+    let client = state.http_client.clone();
+    
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+    
+    // Сначала получаем basic info
+    let response = client
+        .get("https://shikimori.one/api/users/whoami")
+        .header("User-Agent", "Shikimore")
+        .header("Authorization", &format!("Bearer {}", auth_data.access_token))
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to get user info: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        
+        let body = response.text().await.unwrap_or_default();
+        
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)), // Default to 60 seconds if not provided
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+        
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to get user info: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+
+    let body_text = response.text().await.map_err(|e| ApiError {
+        kind: "http".to_string(),
+        message: format!("Failed to read response body: {}", e),
+        retry_after: None,
+        details: None,
+    })?;
+
+    info!("[OAuth] Basic user info received");
+
+    let mut user_info: UserInfo = serde_json::from_str(&body_text).map_err(|e| ApiError {
+        kind: "serialization".to_string(),
+        message: format!("Failed to parse user info: {}", e),
+        retry_after: None,
+        details: Some(serde_json::json!({ "error": e.to_string(), "body": body_text })),
+    })?;
+
+    // Получаем полную информацию о пользователе со статистикой
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+    
+    let full_response = client
+        .get(&format!("https://shikimori.one/api/users/{}", user_info.id))
+        .header("User-Agent", "Shikimore")
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to get full user info: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if full_response.status().is_success() {
+        let full_body = full_response.text().await.unwrap_or_default();
+        info!("[OAuth] User info received");
+        
+        // Парсим только нужные поля из полного ответа
+        if let Ok(full_info) = serde_json::from_str::<serde_json::Value>(&full_body) {
+            // Извлекаем статистику из stats.statuses.anime
+            if let Some(stats) = full_info.get("stats").and_then(|s| s.get("statuses")).and_then(|s| s.get("anime")) {
+                if let Some(statuses) = stats.as_array() {
+                    let mut anime_stats = UserStats {
+                        completed: 0,
+                        dropped: 0,
+                        on_hold: 0,
+                        planned: 0,
+                        watching: 0,
+                    };
+                    for status in statuses {
+                        if let Some(item) = status.as_object() {
+                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                if let Some(size) = item.get("size").and_then(|s| s.as_i64()) {
+                                    match name {
+                                        "completed" => anime_stats.completed = size as i32,
+                                        "dropped" => anime_stats.dropped = size as i32,
+                                        "on_hold" => anime_stats.on_hold = size as i32,
+                                        "planned" => anime_stats.planned = size as i32,
+                                        "watching" => anime_stats.watching = size as i32,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    user_info.rates_anime_stats = Some(anime_stats);
+                }
+            }
+            
+            // Извлекаем статистику из stats.statuses.manga
+            if let Some(stats) = full_info.get("stats").and_then(|s| s.get("statuses")).and_then(|s| s.get("manga")) {
+                if let Some(statuses) = stats.as_array() {
+                    let mut manga_stats = UserStats {
+                        completed: 0,
+                        dropped: 0,
+                        on_hold: 0,
+                        planned: 0,
+                        watching: 0,
+                    };
+                    for status in statuses {
+                        if let Some(item) = status.as_object() {
+                            if let Some(name) = item.get("name").and_then(|n| n.as_str()) {
+                                if let Some(size) = item.get("size").and_then(|s| s.as_i64()) {
+                                    match name {
+                                        "completed" => manga_stats.completed = size as i32,
+                                        "dropped" => manga_stats.dropped = size as i32,
+                                        "on_hold" => manga_stats.on_hold = size as i32,
+                                        "planned" => manga_stats.planned = size as i32,
+                                        "watching" => manga_stats.watching = size as i32,
+                                        _ => {}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    user_info.rates_manga_stats = Some(manga_stats);
+                }
+            }
+            
+            if let Some(about) = full_info.get("about") {
+                if let Some(about_str) = about.as_str() {
+                    if !about_str.is_empty() {
+                        user_info.about = Some(about_str.to_string());
+                    }
+                }
+            }
+            if let Some(website) = full_info.get("website") {
+                if let Some(website_str) = website.as_str() {
+                    if !website_str.is_empty() {
+                        user_info.website = Some(website_str.to_string());
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(user_info)
+}
+
+#[tauri::command]
+async fn logout(state: tauri::State<'_, AppState>) -> Result<(), ApiError> {
+    delete_auth_data()?;
+    // Clear user_id cache
+    {
+        let mut cached = state.user_id.lock().await;
+        *cached = None;
+    }
+    info!("[OAuth] User logged out");
+    Ok(())
+}
+
+#[tauri::command]
+async fn is_authenticated() -> Result<bool, ApiError> {
+    let has_auth = load_auth_data()?.is_some();
+    Ok(has_auth)
+}
+
+#[tauri::command]
+async fn get_user_anime_rates(state: tauri::State<'_, AppState>) -> Result<Vec<UserRate>, ApiError> {
+    let user_id = get_user_id_cached(&state).await?;
+    let client = state.http_client.clone();
+
+    // Pagination: load all records in batches
+    let mut all_rates: Vec<UserRate> = Vec::new();
+    let mut page = 1;
+    let limit = 50;
+    
+    loop {
+        wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+        
+        let response = client
+            .get(&format!("https://shikimori.one/api/users/{}/anime_rates", user_id))
+            .header("User-Agent", "Shikimore")
+            .query(&[("page", &page.to_string()), ("limit", &limit.to_string())])
+            .send()
+            .await
+            .map_err(|e| ApiError {
+                kind: "http".to_string(),
+                message: format!("Failed to get anime rates: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let retry_after = response.headers()
+                .get("Retry-After")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok());
+            let body = response.text().await.unwrap_or_default();
+            
+            if status.as_u16() == 429 {
+                return Err(ApiError {
+                    kind: "rate_limit".to_string(),
+                    message: format!("Too Many Requests: {}", body),
+                    retry_after: retry_after.or(Some(60)),
+                    details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+                });
+            }
+            
+            return Err(ApiError {
+                kind: "api".to_string(),
+                message: format!("Failed to get anime rates: {} - {}", status, body),
+                retry_after: None,
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        let body_text = response.text().await.map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to read response body: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+        
+        let rates: Vec<UserRate> = serde_json::from_str(&body_text).map_err(|e| ApiError {
+            kind: "serialization".to_string(),
+            message: format!("Failed to parse anime rates: {}", e),
+            retry_after: None,
+            details: Some(serde_json::json!({ "error": e.to_string(), "body": body_text })),
+        })?;
+        
+        if rates.is_empty() {
+            break;
+        }
+        
+        all_rates.extend(rates);
+        page += 1;
+        
+        // Safety limit to prevent infinite loops
+        if page > 100 {
+            break;
+        }
+    }
+
+    Ok(all_rates)
+}
+
+#[tauri::command]
+async fn get_user_anime_rates_paginated(
+    state: tauri::State<'_, AppState>,
+    page: Option<u32>,
+    limit: Option<u32>,
+    status: Option<String>,
+) -> Result<SearchResult<UserRate>, ApiError> {
+    let user_id = get_user_id_cached(&state).await?;
+    let client = state.http_client.clone();
+    let page = page.unwrap_or(1);
+    let limit = limit.unwrap_or(20);
+
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+    let mut query_params = vec![
+        ("page", page.to_string()),
+        ("limit", limit.to_string()),
+        ("order", "created_at".to_string()),
+    ];
+
+    if let Some(status_filter) = status {
+        query_params.push(("status", status_filter));
+    }
+
+    let response = client
+        .get(&format!("https://shikimori.one/api/users/{}/anime_rates", user_id))
+        .header("User-Agent", "Shikimore")
+        .query(&query_params)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to get anime rates: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status_code = response.status();
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let body = response.text().await.unwrap_or_default();
+
+        if status_code.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)),
+                details: Some(serde_json::json!({ "status": status_code.as_u16(), "body": body })),
+            });
+        }
+
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to get anime rates: {} - {}", status_code, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status_code.as_u16(), "body": body })),
+        });
+    }
+
+    let body_text = response.text().await.map_err(|e| ApiError {
+        kind: "http".to_string(),
+        message: format!("Failed to read response body: {}", e),
+        retry_after: None,
+        details: None,
+    })?;
+
+    // Handle null response (no rates found)
+    if body_text.trim() == "null" {
+        return Ok(SearchResult {
+            items: vec![],
+            page,
+            limit,
+        });
+    }
+
+    let rates: Vec<UserRate> = serde_json::from_str(&body_text).map_err(|e| ApiError {
+        kind: "serialization".to_string(),
+        message: format!("Failed to parse anime rates: {}", e),
+        retry_after: None,
+        details: Some(serde_json::json!({ "error": e.to_string(), "body": body_text })),
+    })?;
+
+    Ok(SearchResult {
+        items: rates,
+        page,
+        limit,
+    })
+}
+
+#[tauri::command]
+async fn get_user_anime_rates_graphql(
+    state: tauri::State<'_, AppState>,
+    page: Option<u32>,
+    limit: Option<u32>,
+    status: Option<String>,
+) -> Result<SearchResult<UserRate>, ApiError> {
+    let client = &state.client;
+    let page = page.unwrap_or(1);
+    let limit = limit.unwrap_or(20);
+
+    use shikicrate::queries::UserRateSearchParams;
+    
+    let params = UserRateSearchParams {
+        page: Some(page as i32),
+        limit: Some(limit as i32),
+        target_type: None,
+        order_field: None,
+        order: None,
+    };
+
+    let rates = client.user_rates(params).await.map_err(ApiError::from)?;
+
+    // Filter by status if provided
+    let filtered_rates = if let Some(status_filter) = status {
+        rates.into_iter()
+            .filter(|r| r.status.to_lowercase() == status_filter.to_lowercase())
+            .collect()
+    } else {
+        rates
+    };
+
+    // Convert Shikicrate UserRate to our UserRate format
+    let converted_rates: Vec<UserRate> = filtered_rates.into_iter().map(|cr| {
+        UserRate {
+            id: cr.id,
+            score: cr.score.map(|s| s.to_string()),
+            status: cr.status,
+            text: None,
+            text_html: None,
+            rewatches: None,
+            episodes: cr.episodes,
+            volumes: None,
+            chapters: None,
+            anime: cr.anime.map(|a| Anime {
+                id: a.id,
+                title: a.name,
+                russian: a.russian,
+                url: a.url,
+                poster_url: a.poster.and_then(|p| fix_url(p.main_url)),
+                score: a.score.map(|s| s.to_string()),
+                kind: a.kind,
+                status: a.status,
+                episodes: a.episodes,
+                episodes_aired: a.episodes_aired,
+                aired_on: a.aired_on.map(|d| Date {
+                    year: d.year,
+                    month: d.month,
+                    day: d.day,
+                    date: d.date,
+                }),
+            }),
+            manga: None,
+        }
+    }).collect();
+
+    Ok(SearchResult {
+        items: converted_rates,
+        page,
+        limit,
+    })
+}
+
+#[tauri::command]
+async fn get_user_manga_rates(state: tauri::State<'_, AppState>) -> Result<Vec<UserRate>, ApiError> {
+    let user_id = get_user_id_cached(&state).await?;
+    let client = state.http_client.clone();
+
+    // Pagination: load all records in batches
+    let mut all_rates: Vec<UserRate> = Vec::new();
+    let mut page = 1;
+    let limit = 50;
+    
+    loop {
+        wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+        
+        let response = client
+            .get(&format!("https://shikimori.one/api/users/{}/manga_rates", user_id))
+            .header("User-Agent", "Shikimore")
+            .query(&[("page", &page.to_string()), ("limit", &limit.to_string())])
+            .send()
+            .await
+            .map_err(|e| ApiError {
+                kind: "http".to_string(),
+                message: format!("Failed to get manga rates: {}", e),
+                retry_after: None,
+                details: None,
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let retry_after = response.headers()
+                .get("Retry-After")
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok());
+            let body = response.text().await.unwrap_or_default();
+            
+            if status.as_u16() == 429 {
+                return Err(ApiError {
+                    kind: "rate_limit".to_string(),
+                    message: format!("Too Many Requests: {}", body),
+                    retry_after: retry_after.or(Some(60)),
+                    details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+                });
+            }
+            
+            return Err(ApiError {
+                kind: "api".to_string(),
+                message: format!("Failed to get manga rates: {} - {}", status, body),
+                retry_after: None,
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        let body_text = response.text().await.map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to read response body: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+        
+        let rates: Vec<UserRate> = serde_json::from_str(&body_text).map_err(|e| ApiError {
+            kind: "serialization".to_string(),
+            message: format!("Failed to parse manga rates: {}", e),
+            retry_after: None,
+            details: Some(serde_json::json!({ "error": e.to_string(), "body": body_text })),
+        })?;
+        
+        if rates.is_empty() {
+            break;
+        }
+        
+        all_rates.extend(rates);
+        page += 1;
+        
+        // Safety limit to prevent infinite loops
+        if page > 100 {
+            break;
+        }
+    }
+
+    Ok(all_rates)
+}
+
+#[tauri::command]
+async fn get_user_manga_rates_paginated(
+    state: tauri::State<'_, AppState>,
+    page: Option<u32>,
+    limit: Option<u32>,
+    status: Option<String>,
+) -> Result<SearchResult<UserRate>, ApiError> {
+    let user_id = get_user_id_cached(&state).await?;
+    let client = state.http_client.clone();
+    let page = page.unwrap_or(1);
+    let limit = limit.unwrap_or(20);
+
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+    let mut query_params = vec![
+        ("page", page.to_string()),
+        ("limit", limit.to_string()),
+        ("order", "created_at".to_string()),
+    ];
+
+    if let Some(status_filter) = status {
+        query_params.push(("status", status_filter));
+    }
+
+    let response = client
+        .get(&format!("https://shikimori.one/api/users/{}/manga_rates", user_id))
+        .header("User-Agent", "Shikimore")
+        .query(&query_params)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to get manga rates: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status_code = response.status();
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let body = response.text().await.unwrap_or_default();
+
+        if status_code.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)),
+                details: Some(serde_json::json!({ "status": status_code.as_u16(), "body": body })),
+            });
+        }
+
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to get manga rates: {} - {}", status_code, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status_code.as_u16(), "body": body })),
+        });
+    }
+
+    let body_text = response.text().await.map_err(|e| ApiError {
+        kind: "http".to_string(),
+        message: format!("Failed to read response body: {}", e),
+        retry_after: None,
+        details: None,
+    })?;
+
+    // Handle null response (no rates found)
+    if body_text.trim() == "null" {
+        return Ok(SearchResult {
+            items: vec![],
+            page,
+            limit,
+        });
+    }
+
+    let rates: Vec<UserRate> = serde_json::from_str(&body_text).map_err(|e| ApiError {
+        kind: "serialization".to_string(),
+        message: format!("Failed to parse manga rates: {}", e),
+        retry_after: None,
+        details: Some(serde_json::json!({ "error": e.to_string(), "body": body_text })),
+    })?;
+
+    Ok(SearchResult {
+        items: rates,
+        page,
+        limit,
+    })
+}
+
+#[tauri::command]
+async fn get_user_manga_rates_graphql(
+    state: tauri::State<'_, AppState>,
+    page: Option<u32>,
+    limit: Option<u32>,
+    status: Option<String>,
+) -> Result<SearchResult<UserRate>, ApiError> {
+    let client = &state.client;
+    let page = page.unwrap_or(1);
+    let limit = limit.unwrap_or(20);
+
+    use shikicrate::queries::UserRateSearchParams;
+    
+    let params = UserRateSearchParams {
+        page: Some(page as i32),
+        limit: Some(limit as i32),
+        target_type: None,
+        order_field: None,
+        order: None,
+    };
+
+    let rates = client.user_rates(params).await.map_err(ApiError::from)?;
+
+    // Filter by status if provided
+    let filtered_rates = if let Some(status_filter) = status {
+        rates.into_iter()
+            .filter(|r| r.status.to_lowercase() == status_filter.to_lowercase())
+            .collect()
+    } else {
+        rates
+    };
+
+    // Convert Shikicrate UserRate to our UserRate format
+    let converted_rates: Vec<UserRate> = filtered_rates.into_iter().map(|cr| {
+        UserRate {
+            id: cr.id,
+            score: cr.score.map(|s| s.to_string()),
+            status: cr.status,
+            text: None,
+            text_html: None,
+            rewatches: None,
+            episodes: None,
+            volumes: cr.volumes,
+            chapters: cr.chapters,
+            anime: None,
+            manga: cr.manga.map(|m| Manga {
+                id: m.id,
+                title: m.name,
+                russian: m.russian,
+                url: m.url,
+                poster_url: m.poster.and_then(|p| fix_url(p.main_url)),
+                score: m.score.map(|s| s.to_string()),
+                kind: m.kind,
+                status: m.status,
+                volumes: m.volumes,
+                chapters: m.chapters,
+            }),
+        }
+    }).collect();
+
+    Ok(SearchResult {
+        items: converted_rates,
+        page,
+        limit,
+    })
+}
+
 #[tauri::command]
 async fn search_anime(
     state: tauri::State<'_, AppState>,
@@ -387,8 +1674,6 @@ async fn search_anime(
     genres: Option<String>,
     order: Option<String>,
 ) -> Result<SearchResult<Anime>, ApiError> {
-    debug!("[Backend] search_anime вызвана: query='{}', page={:?}, limit={:?}, kind={:?}, genres={:?}", query, page, limit, kind, genres);
-    
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
     let client = &state.client;
@@ -410,14 +1695,15 @@ async fn search_anime(
         status: None,
     };
 
-    debug!("[Backend] AnimeSearchParams: genre = {:?}", params.genre);
-    
-    debug!("[Backend] Выполнение запроса к API...");
     let animes = match client.animes(params).await {
         Ok(a) => {
-            debug!("[Backend] Получено {} аниме", a.len());
+            info!("[Backend] Got {} animes from GraphQL", a.len());
+            if a.len() > 0 {
+                info!("[Backend] First anime: id={}, title={}", a[0].id, a[0].name);
+                info!("[Backend] First anime aired_on: {:?}", a[0].aired_on);
+            }
             a
-        },
+        }
         Err(e) => {
             error!("[Backend] Ошибка запроса аниме: {:?}", e);
             let api_err = ApiError::from(e);
@@ -425,8 +1711,7 @@ async fn search_anime(
             return Err(api_err);
         }
     };
-    
-    debug!("[Backend] Преобразование данных...");
+
     let anime_list: Vec<Anime> = animes
         .into_iter()
         .map(|a| Anime {
@@ -435,15 +1720,20 @@ async fn search_anime(
             russian: a.russian,
             url: a.url.or_else(|| Some(format!("https://shikimori.io/animes/{}", a.id))),
             poster_url: a.poster.and_then(|p| p.main_url),
-            score: a.score,
+            score: a.score.map(|s| s.to_string()),
             kind: a.kind,
             status: a.status,
             episodes: a.episodes,
             episodes_aired: a.episodes_aired,
+            aired_on: a.aired_on.map(|d| Date {
+                year: d.year,
+                month: d.month,
+                day: d.day,
+                date: d.date,
+            }),
         })
         .collect();
-    
-    debug!("[Backend] Возврат результата: {} элементов", anime_list.len());
+
     Ok(SearchResult {
         items: anime_list,
         page,
@@ -461,8 +1751,6 @@ async fn search_manga(
     genres: Option<String>,
     order: Option<String>,
 ) -> Result<SearchResult<Manga>, ApiError> {
-    debug!("[Backend] search_manga вызвана: query='{}', page={:?}, limit={:?}, kind={:?}, genres={:?}", query, page, limit, kind, genres);
-
     let page = page.unwrap_or(1);
     let limit = limit.unwrap_or(20);
     let client = &state.client;
@@ -482,12 +1770,8 @@ async fn search_manga(
         status: None,
     };
 
-    debug!("[Backend] Выполнение запроса к API...");
     let mangas = match client.mangas(params).await {
-        Ok(m) => {
-            debug!("[Backend] Получено {} манги", m.len());
-            m
-        },
+        Ok(m) => m,
         Err(e) => {
             error!("[Backend] Ошибка запроса манги: {:?}", e);
             return Err(ApiError::from(e));
@@ -502,7 +1786,7 @@ async fn search_manga(
             russian: m.russian,
             url: m.url.or_else(|| Some(format!("https://shikimori.io/mangas/{}", m.id))),
             poster_url: m.poster.and_then(|p| p.main_url),
-            score: m.score,
+            score: m.score.map(|s| s.to_string()),
             kind: m.kind,
             status: m.status,
             volumes: m.volumes,
@@ -510,7 +1794,6 @@ async fn search_manga(
         })
         .collect();
 
-    debug!("[Backend] Возврат результата: {} элементов", manga_list.len());
     Ok(SearchResult {
         items: manga_list,
         page,
@@ -525,14 +1808,11 @@ async fn search_characters(
     limit: Option<u32>,
     ids: Option<Vec<String>>,
 ) -> Result<SearchResult<Character>, ApiError> {
-    debug!("[Backend] search_characters вызвана: page={:?}, limit={:?}, ids={:?}", page, limit, ids);
-
     let client = &state.client;
 
     use shikicrate::queries::CharacterSearchParams;
-    
+
     if let Some(ids) = ids {
-        debug!("[Backend] Поиск по ID: {} персонажей", ids.len());
         let params = CharacterSearchParams {
             page: None,
             limit: None,
@@ -541,10 +1821,7 @@ async fn search_characters(
         };
 
         let characters = match client.characters(params).await {
-            Ok(c) => {
-                debug!("[Backend] Получено {} персонажей по ID", c.len());
-                c
-            },
+            Ok(c) => c,
             Err(e) => {
                 error!("[Backend] Ошибка поиска персонажей по ID: {:?}", e);
                 return Err(ApiError::from(e));
@@ -578,7 +1855,6 @@ async fn search_characters(
     let page_val = page.unwrap_or(1);
     let limit_val = limit.unwrap_or(20);
 
-    debug!("[Backend] Поиск по странице: page={}, limit={}", page_val, limit_val);
     let params = CharacterSearchParams {
         page: Some(page_val as i32),
         limit: Some(limit_val as i32),
@@ -587,10 +1863,7 @@ async fn search_characters(
     };
 
     let characters = match client.characters(params).await {
-        Ok(c) => {
-            debug!("[Backend] Получено {} персонажей (страница {})", c.len(), page_val);
-            c
-        },
+        Ok(c) => c,
         Err(e) => {
             error!("[Backend] Ошибка поиска персонажей: {:?}", e);
             return Err(ApiError::from(e));
@@ -612,7 +1885,6 @@ async fn search_characters(
         })
         .collect();
 
-    debug!("[Backend] Возврат результата: {} персонажей", character_list.len());
     Ok(SearchResult {
         items: character_list,
         page: page_val,
@@ -625,16 +1897,10 @@ async fn get_character_details(
     state: tauri::State<'_, AppState>,
     id: i64
 ) -> Result<CharacterDetail, ApiError> {
-    debug!("[Backend] Вызов get_character_details (ID: {})", id);
-
     let client = &state.client;
 
-    debug!("[Backend] Поиск персонажа по ID через API...");
     let character = match client.character_detail(id).await {
-        Ok(Some(c)) => {
-            debug!("[Backend] Персонаж найден: {}", c.name);
-            c
-        },
+        Ok(Some(c)) => c,
         Ok(None) => {
             warn!("[Backend] Персонаж с ID {} не найден", id);
             return Err(ApiError {
@@ -670,8 +1936,6 @@ async fn search_people(
     query: String,
     limit: Option<u32>,
 ) -> Result<SearchResult<Person>, ApiError> {
-    debug!("[Backend] search_people вызвана: query='{}', limit={:?}", query, limit);
-
     let limit = limit.unwrap_or(20);
     let client = &state.client;
 
@@ -682,12 +1946,8 @@ async fn search_people(
         limit: Some(limit as i32),
     };
 
-    debug!("[Backend] Выполнение запроса к API...");
     let people = match client.people(params).await {
-        Ok(p) => {
-            debug!("[Backend] Получено {} людей", p.len());
-            p
-        },
+        Ok(p) => p,
         Err(e) => {
             error!("[Backend] Ошибка запроса людей: {:?}", e);
             return Err(ApiError::from(e));
@@ -709,7 +1969,6 @@ async fn search_people(
         })
         .collect();
 
-    debug!("[Backend] Возврат результата: {} людей", person_list.len());
     Ok(SearchResult {
         items: person_list,
         page: 1,
@@ -889,12 +2148,25 @@ async fn get_anime_by_id(
     state: tauri::State<'_, AppState>,
     id: i64
 ) -> Result<AnimeDetail, ApiError> {
+    
+    // Check cache first
+    let cache_key = text_cache::cache_key_anime(id);
+    if let Ok(Some(cached_json)) = state.text_cache.get(&cache_key) {
+        match serde_json::from_str::<AnimeDetail>(&cached_json) {
+            Ok(cached) => return Ok(cached),
+            Err(e) => {
+                warn!("[get_anime_by_id] Failed to deserialize cached data: {}", e);
+            }
+        }
+    }
+    
     let client = &state.client;
 
     // Используем выделенный метод для получения деталей
-    debug!("[Backend] Поиск аниме по ID через API...");
     let anime = match client.anime_detail(id).await {
-        Ok(Some(a)) => a,
+        Ok(Some(a)) => {
+            a
+        },
         Ok(None) => {
             warn!("[Backend] Аниме с ID {} не найдено", id);
             return Err(ApiError {
@@ -909,9 +2181,8 @@ async fn get_anime_by_id(
             return Err(ApiError::from(e));
         }
     };
-    
-    debug!("[Backend] Аниме найдено: {}. Преобразование данных...", anime.name);
-    Ok(AnimeDetail {
+
+    let result = AnimeDetail {
         id: anime.id,
         mal_id: anime.mal_id,
         title: anime.name,
@@ -950,7 +2221,17 @@ async fn get_anime_by_id(
         fansubbers: anime.fansubbers,
         fandubbers: anime.fandubbers,
         licensors: anime.licensors,
-    })
+    };
+
+    // Cache the result
+    if let Ok(json) = serde_json::to_string(&result) {
+        if let Err(e) = state.text_cache.set(&cache_key, &json) {
+            warn!("[get_anime_by_id] Failed to cache anime data: {}", e);
+        } else {
+        }
+    }
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -958,12 +2239,25 @@ async fn get_manga_by_id(
     state: tauri::State<'_, AppState>,
     id: i64
 ) -> Result<MangaDetail, ApiError> {
+    
+    // Check cache first
+    let cache_key = text_cache::cache_key_manga(id);
+    if let Ok(Some(cached_json)) = state.text_cache.get(&cache_key) {
+        match serde_json::from_str::<MangaDetail>(&cached_json) {
+            Ok(cached) => return Ok(cached),
+            Err(e) => {
+                warn!("[get_manga_by_id] Failed to deserialize cached data: {}", e);
+            }
+        }
+    }
+    
     let client = &state.client;
 
     // Используем выделенный метод для получения деталей
-    debug!("[Backend] Поиск манги по ID через API...");
     let manga = match client.manga_detail(id).await {
-        Ok(Some(m)) => m,
+        Ok(Some(m)) => {
+            m
+        },
         Ok(None) => {
             warn!("[Backend] Манга с ID {} не найдена", id);
             return Err(ApiError {
@@ -978,9 +2272,8 @@ async fn get_manga_by_id(
             return Err(ApiError::from(e));
         }
     };
-    
-    debug!("[Backend] Манга найдена: {}. Преобразование данных...", manga.name);
-    Ok(MangaDetail {
+
+    let result = MangaDetail {
         id: manga.id,
         mal_id: manga.mal_id,
         title: manga.name,
@@ -1011,7 +2304,17 @@ async fn get_manga_by_id(
         scores_stats: manga.scores_stats.map(|s| s.into_iter().map(convert_score_stat).collect()),
         statuses_stats: manga.statuses_stats.map(|s| s.into_iter().map(convert_status_stat).collect()),
         licensors: manga.licensors,
-    })
+    };
+
+    // Cache the result
+    if let Ok(json) = serde_json::to_string(&result) {
+        if let Err(e) = state.text_cache.set(&cache_key, &json) {
+            warn!("[get_manga_by_id] Failed to cache manga data: {}", e);
+        } else {
+        }
+    }
+
+    Ok(result)
 }
 
 #[tauri::command]
@@ -1022,8 +2325,6 @@ async fn get_similar_anime(
     let client = &state.client;
 
     let similar = client.similar_anime(id).await.map_err(ApiError::from)?;
-
-    debug!("[Backend] Получено {} похожих аниме", similar.len());
 
     Ok(similar)
 }
@@ -1037,8 +2338,6 @@ async fn get_related_anime(
 
     let related = client.related_anime(id).await.map_err(ApiError::from)?;
 
-    debug!("[Backend] Получено {} связанных аниме", related.len());
-
     Ok(related)
 }
 
@@ -1051,35 +2350,48 @@ async fn get_related_manga(
 
     let related = client.related_manga(id).await.map_err(ApiError::from)?;
 
-    debug!("[Backend] Получено {} связанных манги", related.len());
-
     Ok(related)
 }
 
 #[tauri::command]
-async fn get_accent_color(url: String) -> Result<String, String> {
-    debug!("[Backend] get_accent_color вызвана: url='{}'", url);
+async fn get_accent_color(url: String, state: tauri::State<'_, AppState>) -> Result<String, String> {
+    wait_for_rate_limit(&state.last_accent_color_request, ACCENT_COLOR_RATE_LIMIT_DELAY).await;
 
-    // Try to use preview/x48 version for better performance
-    let optimized_url = url
-        .replace("/original/", "/x48/")
-        .replace("/preview/", "/x48/");
-
-    let bytes = match reqwest::get(&optimized_url).await {
-        Ok(resp) => match resp.bytes().await {
-            Ok(b) => {
-                debug!("[Backend] Загружено {} байт изображения", b.len());
-                b
-            },
-            Err(e) => {
-                error!("[Backend] Ошибка чтения байтов: {}", e);
-                return Err(e.to_string());
-            }
-        },
-        Err(e) => {
-            error!("[Backend] Ошибка загрузки изображения: {}", e);
-            return Err(e.to_string());
+    let bytes = if url.starts_with("data:") {
+        // Handle data URL
+        let data_url = url.clone();
+        let parts: Vec<&str> = data_url.split(',').collect();
+        if parts.len() != 2 {
+            return Err("Invalid data URL format".to_string());
         }
+        let base64_data = parts[1];
+        base64::engine::general_purpose::STANDARD
+            .decode(base64_data)
+            .map_err(|e| format!("Failed to decode base64: {}", e))?
+    } else {
+        // Try to use preview/x48 version for better performance
+        let optimized_url = url
+            .replace("/original/", "/x48/")
+            .replace("/preview/", "/x48/");
+
+        let client = state.http_client.clone();
+        
+        client
+            .get(&optimized_url)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|e| {
+                error!("[Backend] Ошибка загрузки изображения: {}", e);
+                e.to_string()
+            })?
+            .bytes()
+            .await
+            .map_err(|e| {
+                error!("[Backend] Ошибка чтения байтов: {}", e);
+                e.to_string()
+            })?
+            .to_vec()
     };
 
     let img = match image::load_from_memory(&bytes) {
@@ -1089,7 +2401,9 @@ async fn get_accent_color(url: String) -> Result<String, String> {
             return Err(e.to_string());
         }
     };
-    let img = img.thumbnail(10, 10);
+    
+    // Use larger thumbnail for better color accuracy
+    let img = img.thumbnail(32, 32);
     let rgb = img.to_rgb8();
 
     let mut r: u32 = 0;
@@ -1098,8 +2412,9 @@ async fn get_accent_color(url: String) -> Result<String, String> {
     let mut count: u32 = 0;
 
     for pixel in rgb.pixels() {
-        let brightness = (pixel[0] as f32 * 0.299 + pixel[1] as f32 * 0.587 + pixel[2] as f32 * 0.114) as f32;
-        if brightness > 30.0 && brightness < 220.0 {
+        let brightness = pixel[0] as f32 * 0.299 + pixel[1] as f32 * 0.587 + pixel[2] as f32 * 0.114;
+        // Filter out very dark and very bright pixels for better accent color
+        if brightness > 20.0 && brightness < 240.0 {
             r += pixel[0] as u32;
             g += pixel[1] as u32;
             b += pixel[2] as u32;
@@ -1108,24 +2423,648 @@ async fn get_accent_color(url: String) -> Result<String, String> {
     }
 
     if count == 0 {
-        debug!("[Backend] Не найдено подходящих пикселей, используем дефолтный цвет");
-        return Ok("rgba(180, 160, 120, 0.9)".to_string());
+        warn!("[Backend] No valid pixels found, using default color");
+        return Ok("#b4a078".to_string());
     }
 
-    let factor = 0.8;
-    let color = format!(
-        "rgba({}, {}, {}, 0.9)",
-        ((r / count) as f32 * factor) as u8,
-        ((g / count) as f32 * factor) as u8,
-        ((b / count) as f32 * factor) as u8
-    );
-    debug!("[Backend] Вычислен акцентный цвет: {}", color);
+    let avg_r = (r / count) as u8;
+    let avg_g = (g / count) as u8;
+    let avg_b = (b / count) as u8;
+    
+    // Apply slight darkening for better accent color
+    let factor = 0.85;
+    let final_r = ((avg_r as f32 * factor) as u8).max(0).min(255);
+    let final_g = ((avg_g as f32 * factor) as u8).max(0).min(255);
+    let final_b = ((avg_b as f32 * factor) as u8).max(0).min(255);
+
+    let color = format!("#{:02x}{:02x}{:02x}", final_r, final_g, final_b);
+    debug!("[Backend] Generated accent color: {}", color);
     Ok(color)
 }
 
+fn get_cache_dir() -> Result<PathBuf, String> {
+    let mut cache_dir = std::env::temp_dir();
+    cache_dir.push("shikimore");
+    cache_dir.push("image_cache");
+
+    if !cache_dir.exists() {
+        fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create cache dir at {:?}: {}", cache_dir, e))?;
+    }
+
+    debug!("[Backend] Image cache dir: {:?}", cache_dir);
+    Ok(cache_dir)
+}
+
+fn clear_expired_images() -> Result<usize, String> {
+    let cache_dir = get_cache_dir()?;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    
+    let mut deleted_count = 0;
+    
+    let entries = fs::read_dir(&cache_dir)
+        .map_err(|e| format!("Failed to read cache dir: {}", e))?;
+    
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("Failed to read dir entry: {}", e))?;
+        let path = entry.path();
+        
+        if let Ok(metadata) = entry.metadata() {
+            if let Ok(modified) = metadata.modified() {
+                let modified_secs = modified
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or(Duration::ZERO)
+                    .as_secs() as i64;
+                
+                if now - modified_secs > IMAGE_CACHE_TTL_SECONDS {
+                    if fs::remove_file(&path).is_ok() {
+                        deleted_count += 1;
+                        debug!("[Backend] Deleted expired image cache: {:?}", path);
+                    }
+                }
+            }
+        }
+    }
+    
+    if deleted_count > 0 {
+        info!("[Backend] Cleared {} expired image cache files", deleted_count);
+    }
+    
+    Ok(deleted_count)
+}
+
+fn url_to_filename(url: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    url.hash(&mut hasher);
+    let hash = hasher.finish();
+    
+    // Extract extension from URL
+    let ext = url
+        .split('.')
+        .last()
+        .and_then(|s| s.split('?').next())
+        .unwrap_or("jpg");
+    
+    format!("{}.{}", hash, ext)
+}
+
 #[tauri::command]
-async fn fetch_anilist_media_info(name: String, media_type: String) -> Result<serde_json::Value, String> {
-    let client = reqwest::Client::new();
+async fn get_cached_image(url: String) -> Result<String, String> {
+    // Validate URL
+    if url.is_empty() {
+        error!("[Backend] Empty URL provided to get_cached_image");
+        return Err("Empty URL".to_string());
+    }
+
+    // Fix protocol-relative URLs (//example.com/image.jpg)
+    let url = if url.starts_with("//") {
+        format!("https:{}", url)
+    } else {
+        url
+    };
+
+    let cache_dir = get_cache_dir()?;
+    let filename = url_to_filename(&url);
+    let cache_path = cache_dir.join(&filename);
+
+    // Check if image is already cached
+    if cache_path.exists() {
+    } else {
+        // Download and cache the image
+        debug!("[Backend] Attempting to download image from URL: {}", url);
+        let response = reqwest::get(&url)
+            .await
+            .map_err(|e| {
+                error!("[Backend] Failed to download image (URL: {}): {}", url, e);
+                format!("Failed to download image: {}", e)
+            })?;
+
+        if !response.status().is_success() {
+            return Err(format!("HTTP error: {}", response.status()));
+        }
+
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|e| {
+                error!("[Backend] Failed to read image bytes: {}", e);
+                format!("Failed to read image bytes: {}", e)
+            })?;
+
+        fs::write(&cache_path, &bytes)
+            .map_err(|e| {
+                error!("[Backend] Failed to write cached image: {}", e);
+                format!("Failed to write cached image: {}", e)
+            })?;
+    }
+
+    // Read file and convert to base64 data URL
+    let image_data = fs::read(&cache_path)
+        .map_err(|e| {
+            error!("[Backend] Failed to read cached image: {}", e);
+            format!("Failed to read cached image: {}", e)
+        })?;
+
+    // Detect mime type from extension
+    let mime_type = match cache_path.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("webp") => "image/webp",
+        Some("gif") => "image/gif",
+        _ => "image/jpeg",
+    };
+
+    let base64 = base64::engine::general_purpose::STANDARD.encode(&image_data);
+    let data_url = format!("data:{};base64,{}", mime_type, base64);
+
+    Ok(data_url)
+}
+
+#[tauri::command]
+async fn get_user_rate(
+    target_id: i64,
+    target_type: String,
+    state: tauri::State<'_, AppState>
+) -> Result<Option<UserRateSimple>, ApiError> {
+
+    eprintln!("[get_user_rate] Called with target_id={}, target_type={}", target_id, target_type);
+
+    let auth_data = match load_auth_data() {
+        Ok(Some(data)) => data,
+        Ok(None) => {
+            eprintln!("[get_user_rate] No auth data, returning None");
+            return Ok(None);
+        }
+        Err(e) => {
+            eprintln!("[get_user_rate] Auth error: {}", e);
+            return Err(e);
+        }
+    };
+
+    let user_id = match get_user_id_cached(&state).await {
+        Ok(id) => id,
+        Err(e) => {
+            eprintln!("[get_user_rate] Failed to get user_id: {}", e);
+            return Err(e);
+        }
+    };
+
+    eprintln!("[get_user_rate] user_id={}, querying Shikimori API", user_id);
+
+
+    // Check cache first
+    let cache_key = text_cache::cache_key_user_rate(user_id, target_id, &target_type);
+    if let Ok(Some(cached_json)) = state.text_cache.get(&cache_key) {
+        match serde_json::from_str::<UserRateSimple>(&cached_json) {
+            Ok(cached) => {
+                eprintln!("[get_user_rate] Cache hit for target_id={}", target_id);
+                return Ok(Some(cached));
+            }
+            Err(e) => {
+                warn!("[get_user_rate] Failed to deserialize cached data: {}", e);
+            }
+        }
+    }
+
+    let client = state.http_client.clone();
+
+    let endpoint = if target_type.to_lowercase() == "anime" {
+        "anime_rates"
+    } else {
+        "manga_rates"
+    };
+
+    // Paginate through all pages to find the specific target_id
+    let mut page = 1;
+    let limit = 500;
+
+    loop {
+        wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+        let response = client
+            .get(&format!(
+                "https://shikimori.one/api/users/{}/{}",
+                user_id, endpoint
+            ))
+            .header("User-Agent", "Shikimore")
+            .header("Authorization", &format!("Bearer {}", auth_data.access_token))
+            .query(&[("page", &page.to_string()), ("limit", &limit.to_string())])
+            .send()
+            .await
+            .map_err(|e| {
+                error!("[get_user_rate] HTTP request failed: {}", e);
+                ApiError {
+                    kind: "http".to_string(),
+                    message: format!("Failed to get user rate: {}", e),
+                    retry_after: None,
+                    details: None,
+                }
+            })?;
+
+        let status = response.status();
+        let body = response.text().await.map_err(|e| {
+            error!("[get_user_rate] Failed to read response body: {}", e);
+            ApiError {
+                kind: "http".to_string(),
+                message: format!("Failed to read response body: {}", e),
+                retry_after: None,
+                details: None,
+            }
+        })?;
+
+        if !status.is_success() {
+            if status.as_u16() == 404 || body.trim() == "[]" || body.trim() == "null" {
+                return Ok(None);
+            }
+
+            return Err(ApiError {
+                kind: "api".to_string(),
+                message: format!("Failed to get user rate: {} - {}", status, body),
+                retry_after: None,
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        if body.trim() == "[]" || body.trim() == "null" {
+            eprintln!("[get_user_rate] No more rates on page {}", page);
+            break;
+        }
+
+        let rates: Vec<serde_json::Value> = serde_json::from_str(&body).map_err(|e| {
+            error!("[get_user_rate] Failed to parse user rate: {}", e);
+            ApiError {
+                kind: "serialization".to_string(),
+                message: format!("Failed to parse user rate: {}", e),
+                retry_after: None,
+                details: Some(serde_json::json!({ "error": e.to_string(), "body": body })),
+            }
+        })?;
+
+        // Find the rate for the specific target_id
+        for rate in rates {
+            let anime_id = rate.get("anime")
+                .and_then(|a| a.get("id"))
+                .and_then(|id| id.as_i64());
+            let manga_id = rate.get("manga")
+                .and_then(|m| m.get("id"))
+                .and_then(|id| id.as_i64());
+
+            eprintln!("[get_user_rate] Checking: anime_id={:?}, manga_id={:?}, target_id={}", anime_id, manga_id, target_id);
+
+            let found = match target_type.to_lowercase().as_str() {
+                "anime" => anime_id == Some(target_id),
+                "manga" => manga_id == Some(target_id),
+                _ => false,
+            };
+
+            if found {
+                let simple = serde_json::from_value::<UserRateSimple>(rate).map_err(|e| {
+                    error!("[get_user_rate] Failed to convert rate: {}", e);
+                    ApiError {
+                        kind: "serialization".to_string(),
+                        message: format!("Failed to convert rate: {}", e),
+                        retry_after: None,
+                        details: None,
+                    }
+                })?;
+
+                // Cache the result
+                if let Ok(json) = serde_json::to_string(&simple) {
+                    if let Err(e) = state.text_cache.set(&cache_key, &json) {
+                        warn!("[get_user_rate] Failed to cache user rate: {}", e);
+                    }
+                }
+
+                return Ok(Some(simple));
+            }
+        }
+
+        page += 1;
+        if page > 100 {
+            eprintln!("[get_user_rate] Reached page limit without finding target_id={}", target_id);
+            break;
+        }
+    }
+
+    Ok(None)
+}
+
+#[derive(Serialize, Deserialize)]
+struct CreateUserRateRequest {
+    user_id: i64,
+    target_id: i64,
+    target_type: String,
+    score: Option<String>,
+    status: Option<String>,
+    episodes: Option<String>,
+    chapters: Option<String>,
+    volumes: Option<String>,
+    rewatches: Option<String>,
+    text: Option<String>,
+}
+
+#[tauri::command]
+async fn create_user_rate(
+    request: CreateUserRateRequest,
+    state: tauri::State<'_, AppState>
+) -> Result<UserRateSimple, ApiError> {
+    let auth_data = load_auth_data()?
+        .ok_or_else(|| ApiError {
+            kind: "auth".to_string(),
+            message: "Not authenticated".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+
+    let client = state.http_client.clone();
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+    let mut user_rate = serde_json::Map::new();
+    user_rate.insert("user_id".to_string(), serde_json::json!(request.user_id));
+    user_rate.insert("target_id".to_string(), serde_json::json!(request.target_id));
+    user_rate.insert("target_type".to_string(), serde_json::json!(request.target_type));
+    
+    if let Some(score) = request.score {
+        user_rate.insert("score".to_string(), serde_json::json!(score));
+    }
+    if let Some(status) = request.status {
+        user_rate.insert("status".to_string(), serde_json::json!(status));
+    }
+    if let Some(episodes) = request.episodes {
+        user_rate.insert("episodes".to_string(), serde_json::json!(episodes));
+    }
+    if let Some(chapters) = request.chapters {
+        user_rate.insert("chapters".to_string(), serde_json::json!(chapters));
+    }
+    if let Some(volumes) = request.volumes {
+        user_rate.insert("volumes".to_string(), serde_json::json!(volumes));
+    }
+    if let Some(rewatches) = request.rewatches {
+        user_rate.insert("rewatches".to_string(), serde_json::json!(rewatches));
+    }
+    if let Some(text) = request.text {
+        user_rate.insert("text".to_string(), serde_json::json!(text));
+    }
+
+    let body = serde_json::json!({
+        "user_rate": user_rate
+    });
+
+    let response = client
+        .post("https://shikimori.one/api/v2/user_rates")
+        .header("User-Agent", "Shikimore")
+        .header("Authorization", &format!("Bearer {}", auth_data.access_token))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to create user rate: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let body = response.text().await.unwrap_or_default();
+
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)),
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to create user rate: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+
+    let user_rate: UserRateSimple = response.json().await.map_err(|e| ApiError {
+        kind: "serialization".to_string(),
+        message: format!("Failed to parse user rate response: {}", e),
+        retry_after: None,
+        details: None,
+    })?;
+
+    // Invalidate cache for this user rate
+    let cache_key = text_cache::cache_key_user_rate(request.user_id, request.target_id, &request.target_type);
+    if let Err(e) = state.text_cache.invalidate(&cache_key) {
+        warn!("[create_user_rate] Failed to invalidate cache: {}", e);
+    }
+
+    Ok(user_rate)
+}
+
+#[derive(Serialize, Deserialize)]
+struct UpdateUserRateRequest {
+    score: Option<String>,
+    status: Option<String>,
+    episodes: Option<String>,
+    chapters: Option<String>,
+    volumes: Option<String>,
+    rewatches: Option<String>,
+    text: Option<String>,
+}
+
+#[tauri::command]
+async fn update_user_rate(
+    id: i64,
+    request: UpdateUserRateRequest,
+    state: tauri::State<'_, AppState>
+) -> Result<UserRateSimple, ApiError> {
+    let auth_data = load_auth_data()?
+        .ok_or_else(|| ApiError {
+            kind: "auth".to_string(),
+            message: "Not authenticated".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+
+    let client = state.http_client.clone();
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+    let mut user_rate = serde_json::Map::new();
+    
+    if let Some(score) = request.score {
+        user_rate.insert("score".to_string(), serde_json::json!(score));
+    }
+    if let Some(status) = request.status {
+        user_rate.insert("status".to_string(), serde_json::json!(status));
+    }
+    if let Some(episodes) = request.episodes {
+        user_rate.insert("episodes".to_string(), serde_json::json!(episodes));
+    }
+    if let Some(chapters) = request.chapters {
+        user_rate.insert("chapters".to_string(), serde_json::json!(chapters));
+    }
+    if let Some(volumes) = request.volumes {
+        user_rate.insert("volumes".to_string(), serde_json::json!(volumes));
+    }
+    if let Some(rewatches) = request.rewatches {
+        user_rate.insert("rewatches".to_string(), serde_json::json!(rewatches));
+    }
+    if let Some(text) = request.text {
+        user_rate.insert("text".to_string(), serde_json::json!(text));
+    }
+
+    let body = serde_json::json!({
+        "user_rate": user_rate
+    });
+
+    let response = client
+        .patch(&format!("https://shikimori.one/api/v2/user_rates/{}", id))
+        .header("User-Agent", "Shikimore")
+        .header("Authorization", &format!("Bearer {}", auth_data.access_token))
+        .header("Content-Type", "application/json")
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to update user rate: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let body = response.text().await.unwrap_or_default();
+
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)),
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to update user rate: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+
+    let user_rate: UserRateSimple = response.json().await.map_err(|e| ApiError {
+        kind: "serialization".to_string(),
+        message: format!("Failed to parse user rate response: {}", e),
+        retry_after: None,
+        details: None,
+    })?;
+
+    // Invalidate all user_rate cache entries
+    if let Err(e) = state.text_cache.invalidate_pattern("user_rate:%") {
+        warn!("[update_user_rate] Failed to invalidate cache: {}", e);
+    }
+
+    Ok(user_rate)
+}
+
+#[tauri::command]
+async fn delete_user_rate(
+    id: i64,
+    state: tauri::State<'_, AppState>
+) -> Result<(), ApiError> {
+    let auth_data = load_auth_data()?
+        .ok_or_else(|| ApiError {
+            kind: "auth".to_string(),
+            message: "Not authenticated".to_string(),
+            retry_after: None,
+            details: None,
+        })?;
+
+    let client = state.http_client.clone();
+    wait_for_rate_limit(&state.last_rest_request, RATE_LIMIT_DELAY).await;
+
+    let response = client
+        .delete(&format!("https://shikimori.one/api/v2/user_rates/{}", id))
+        .header("User-Agent", "Shikimore")
+        .header("Authorization", &format!("Bearer {}", auth_data.access_token))
+        .send()
+        .await
+        .map_err(|e| ApiError {
+            kind: "http".to_string(),
+            message: format!("Failed to delete user rate: {}", e),
+            retry_after: None,
+            details: None,
+        })?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let retry_after = response.headers()
+            .get("Retry-After")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let body = response.text().await.unwrap_or_default();
+
+        if status.as_u16() == 429 {
+            return Err(ApiError {
+                kind: "rate_limit".to_string(),
+                message: format!("Too Many Requests: {}", body),
+                retry_after: retry_after.or(Some(60)),
+                details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+            });
+        }
+
+        return Err(ApiError {
+            kind: "api".to_string(),
+            message: format!("Failed to delete user rate: {} - {}", status, body),
+            retry_after: None,
+            details: Some(serde_json::json!({ "status": status.as_u16(), "body": body })),
+        });
+    }
+
+    // Invalidate all user_rate cache entries
+    if let Err(e) = state.text_cache.invalidate_pattern("user_rate:%") {
+        warn!("[delete_user_rate] Failed to invalidate cache: {}", e);
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn get_cache_metrics(state: tauri::State<'_, AppState>) -> serde_json::Value {
+    let (hits, misses) = state.text_cache.get_metrics();
+    let total = hits + misses;
+    let hit_rate = if total > 0 {
+        (hits as f64 / total as f64 * 100.0) as f64
+    } else {
+        0.0
+    };
+
+    serde_json::json!({
+        "text_cache": {
+            "hits": hits,
+            "misses": misses,
+            "total": total,
+            "hit_rate": hit_rate
+        }
+    })
+}
+
+#[tauri::command]
+async fn fetch_anilist_media_info(name: String, media_type: String, state: tauri::State<'_, AppState>) -> Result<serde_json::Value, String> {
+    let client = state.http_client.clone();
     let query = r#"
         query ($search: String, $type: MediaType) {
           Page(page: 1, perPage: 1) {
@@ -1173,6 +3112,8 @@ async fn fetch_anilist_media_info(name: String, media_type: String) -> Result<se
 }
 
 fn main() {
+    dotenv::dotenv().ok();
+    
     if let Err(e) = logger::init_logger() {
         eprintln!("Failed to initialize logger: {}", e);
     }
@@ -1181,6 +3122,20 @@ fn main() {
     let app_state = match AppState::new() {
         Ok(state) => {
             info!("HTTP клиент инициализирован");
+            
+            // Clear expired caches on startup
+            if let Err(e) = state.text_cache.clear_expired() {
+                warn!("Failed to clear expired text cache: {}", e);
+            } else {
+                info!("Text cache cleanup completed");
+            }
+            
+            if let Err(e) = clear_expired_images() {
+                warn!("Failed to clear expired image cache: {}", e);
+            } else {
+                info!("Image cache cleanup completed");
+            }
+            
             state
         },
         Err(e) => {
@@ -1192,6 +3147,7 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             search_anime,
@@ -1202,14 +3158,40 @@ fn main() {
             get_manga_by_id,
             get_character_details,
             get_accent_color,
+            get_cached_image,
             get_similar_anime,
             get_related_anime,
             get_related_manga,
             fetch_anilist_media_info,
+            oauth_authorize,
+            open_oauth_window,
+            oauth_callback,
+            oauth_refresh,
+            get_user_info,
+            get_user_anime_rates,
+            get_user_manga_rates,
+            get_user_anime_rates_paginated,
+            get_user_manga_rates_paginated,
+            get_user_anime_rates_graphql,
+            get_user_manga_rates_graphql,
+            get_user_rate,
+            create_user_rate,
+            update_user_rate,
+            delete_user_rate,
+            logout,
+            get_cache_metrics,
+            is_authenticated,
             logger::log_message
         ])
-        .setup(|_app| {
+        .setup(|app| {
             info!("Tauri приложение инициализировано");
+            
+            // Регистрируем deep-link для OAuth callback
+            #[cfg(target_os = "windows")]
+            {
+                app.deep_link().register_all().unwrap();
+            }
+            
             Ok(())
         })
         .run(tauri::generate_context!())

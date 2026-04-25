@@ -213,7 +213,7 @@
 .content-type-tab.active {
   background: var(--primary);
   color: white;
-  box-shadow: 0 2px 8px rgba(100, 108, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
 }
 
 .search-controls-row {
@@ -250,7 +250,7 @@
   outline: none;
   border-color: var(--primary);
   background: var(--bg-hover);
-  box-shadow: 0 0 0 3px rgba(100, 108, 255, 0.1);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .search-icon {
@@ -435,8 +435,8 @@
 }
 
 .anime-item {
-  background: #1a1a2e;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
   transition: var(--transition);
@@ -503,9 +503,9 @@
   left: 50%;
   transform: translateX(-50%);
   padding: 0.35rem 0.75rem;
-  background: rgba(40, 40, 60, 0.85);
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 8px;
   color: white;
   font-size: 0.75rem;
@@ -1107,8 +1107,8 @@
   top: calc(100% + 12px);
   left: 0;
   width: 380px;
-  background: #1a1b2e;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
   border-radius: 12px;
   padding: 1.5rem;
   z-index: 100;

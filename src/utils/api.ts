@@ -8,7 +8,7 @@ export function handleApiError(err: unknown): string {
     if (apiError.kind === "rate_limit" && apiError.retry_after) {
       message += ` (Повторить через ${apiError.retry_after} сек)`;
     } else if (apiError.kind === "graphql" && apiError.details) {
-      console.debug("GraphQL error details:", apiError.details);
+      // GraphQL error details available in apiError.details
     } else if (apiError.kind === "http" && apiError.details) {
       const details = apiError.details as { status?: number; url?: string };
       if (details.status) {

@@ -1,0 +1,23 @@
+.expanded {
+  -webkit-line-clamp: unset !important;
+  line-clamp: unset !important;
+  mask-image: none !important;
+  -webkit-mask-image: none !important;
+}
+
+.readMoreBtn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.25rem 0;
+  margin-top: 0.25rem;
+  transition: var(--transition);
+}
+
+.readMoreBtn:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}

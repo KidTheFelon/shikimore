@@ -1,30 +1,46 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { logger } from "./utils/logger";
-import Header from "./components/Header";
-import Search from "./components/Search";
-import ContentList from "./components/ContentList";
-import BottomBar from "./components/BottomBar";
-import DetailView from "./components/DetailView";
-import CharacterDetailView from "./components/CharacterDetailView";
-import { ToastContainer } from "./components/Toast";
+import { applyTheme, getSavedTheme } from "./utils/theme";
+import Header from "./components/layout/Header";
+import Search from "./components/layout/Search";
+import ContentList from "./components/lists/ContentList";
+import BottomBar from "./components/layout/BottomBar";
+import DetailView from "./components/detail/DetailView";
+import CharacterDetailView from "./components/detail/CharacterDetailView";
+import UserRatesList from "./components/lists/UserRatesList";
+import { ToastContainer } from "./components/ui/Toast";
+import LoginScreen from "./components/auth/LoginScreen";
+import ProfileScreen from "./components/auth/ProfileScreen";
 import { useContent } from "./hooks/useContent";
 import { useSearch } from "./hooks/useSearch";
 import { useDetail } from "./hooks/useDetail";
+import { useAuth } from "./hooks/useAuth";
+import { useAccentColor } from "./hooks/useAccentColor";
 import type {
   ContentType,
   SortOption,
   AnimeDetail,
   MangaDetail,
   CharacterDetail,
-  Toast
+  Toast,
+  ContentItem
 } from "./types";
 import "./styles/globals.css";
 import "./App.css";
 
 function App() {
   const [contentType, setContentType] = useState<ContentType>("anime");
-  
+  const [userRatesFilter, setUserRatesFilter] = useState<{ status: string; type: 'anime' | 'manga' } | null>(null);
+
+  // Auth hook
+  const {
+    isAuthenticated,
+    user,
+    loading: authLoading,
+    logout,
+    checkAuth,
+  } = useAuth();
+
   // Custom hooks
   const {
     contentList,
@@ -71,10 +87,67 @@ function App() {
     setSelectedItem,
     setDetailData,
   } = useDetail();
-  
+
+  // Navigation stack for back/forward navigation
+  const [navStack, setNavStack] = useState<Array<{ type: ContentType; id: number }>>([]);
+  const [forwardStack, setForwardStack] = useState<Array<{ type: ContentType; id: number }>>([]);
+  const MAX_NAV_STACK_SIZE = 10;
+
+  const clearNavStack = useCallback(() => {
+    setNavStack([]);
+    setForwardStack([]);
+  }, []);
+
+  const handleNavigate = useCallback((type: ContentType, id: number) => {
+    // Push current item to stack if navigating to a different item
+    if (selectedItem && (selectedItem.type !== type || selectedItem.id !== id)) {
+      setNavStack(prev => {
+        const newStack = [...prev, selectedItem];
+        // Limit stack size to prevent memory issues
+        return newStack.length > MAX_NAV_STACK_SIZE ? newStack.slice(-MAX_NAV_STACK_SIZE) : newStack;
+      });
+      // Clear forward stack when navigating to new item
+      setForwardStack([]);
+    }
+    setSelectedItem({ type, id });
+    setDetailData(null);
+  }, [selectedItem, setSelectedItem, setDetailData]);
+
+  const handleBack = useCallback(() => {
+    if (navStack.length > 0) {
+      // Pop from stack and navigate back
+      const prevItem = navStack[navStack.length - 1];
+      setNavStack(prev => prev.slice(0, -1));
+      // Push current item to forward stack
+      if (selectedItem) {
+        setForwardStack(prev => [...prev, selectedItem]);
+      }
+      setSelectedItem(prevItem);
+      setDetailData(null);
+    } else {
+      // Stack is empty, go back to list
+      handleBackToList();
+      clearNavStack();
+    }
+  }, [navStack, selectedItem, handleBackToList, setSelectedItem, setDetailData, clearNavStack]);
+
+  const handleForward = useCallback(() => {
+    if (forwardStack.length > 0) {
+      // Pop from forward stack and navigate forward
+      const nextItem = forwardStack[forwardStack.length - 1];
+      setForwardStack(prev => prev.slice(0, -1));
+      // Push current item to nav stack
+      if (selectedItem) {
+        setNavStack(prev => [...prev, selectedItem]);
+      }
+      setSelectedItem(nextItem);
+      setDetailData(null);
+    }
+  }, [forwardStack, selectedItem, setSelectedItem, setDetailData]);
+
   // UI state (остаётся в App)
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
-  const [cardColors, setCardColors] = useState<Record<number, string>>({});
+  const { cardColors, handleImageLoad } = useAccentColor();
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
   const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null);
@@ -90,6 +163,14 @@ function App() {
     logger.info(`[Frontend] App started, loading initial content for ${contentType}`);
     fetchContent(contentType, "", 1, kindFilter, genreFilter, sortBy, false);
   }, [contentType]);
+
+  // Initialize theme on startup
+  useEffect(() => {
+    const savedTheme = getSavedTheme();
+    if (savedTheme) {
+      applyTheme(savedTheme);
+    }
+  }, []);
 
   // Reset animation phase after content loads
   useEffect(() => {
@@ -119,18 +200,6 @@ function App() {
     setToasts((prev) => [...prev, { id, message, type }]);
   }, []);
 
-  // Handle image load for accent colors
-  const handleImageLoad = async (e: React.SyntheticEvent<HTMLImageElement, Event>, id: number) => {
-    const url = e.currentTarget.src;
-    if (url && !cardColors[id]) {
-      try {
-        const color = await invoke<string>("get_accent_color", { url });
-        setCardColors(prev => ({ ...prev, [id]: color }));
-      } catch (err) {
-        // Ignore color errors
-      }
-    }
-  };
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -141,7 +210,7 @@ function App() {
       }
       if (e.key === "Escape") {
         if (selectedItem) {
-          handleBackToList();
+          handleBack();
         } else if (document.activeElement === searchInputRef.current) {
           setSearchQuery("");
           searchInputRef.current?.blur();
@@ -154,7 +223,7 @@ function App() {
         );
         if (currentIndex !== -1) {
           e.preventDefault();
-          const nextIndex = e.key === "ArrowDown" 
+          const nextIndex = e.key === "ArrowDown"
             ? Math.min(currentIndex + 1, contentItemsRef.current.length - 1)
             : Math.max(currentIndex - 1, 0);
           contentItemsRef.current[nextIndex]?.focus();
@@ -164,7 +233,26 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedItem, searchInputRef, handleBackToList, setSearchQuery, contentList.length]);
+  }, [selectedItem, searchInputRef, handleBack, setSearchQuery, contentList.length]);
+
+  // Mouse button shortcuts (back/forward buttons)
+  useEffect(() => {
+    const handleMouseDown = (e: MouseEvent) => {
+      // Button 3 = back, Button 4 = forward
+      if (e.button === 3) {
+        e.preventDefault();
+        if (selectedItem) {
+          handleBack();
+        }
+      } else if (e.button === 4) {
+        e.preventDefault();
+        handleForward();
+      }
+    };
+
+    window.addEventListener("mousedown", handleMouseDown);
+    return () => window.removeEventListener("mousedown", handleMouseDown);
+  }, [selectedItem, handleBack, handleForward]);
 
   // Scroll tracking for header
   useEffect(() => {
@@ -261,6 +349,7 @@ function App() {
       setContentType(newType);
       resetContent();
       resetFilters();
+      clearNavStack();
       setAnimationPhase('entering');
       fetchContent(newType, "", 1, "", [], sortBy, false);
     }, 300);
@@ -285,10 +374,26 @@ function App() {
     resetContent();
   };
 
-  const handleHistorySelectWithReset = (query: string) => {
-    handleHistorySelect(query);
-    resetContent();
-  };
+  const handleContentClickWithReset = useCallback((item: ContentItem) => {
+    // Reset user rates filter when navigating to details
+    if (userRatesFilter) {
+      setUserRatesFilter(null);
+    }
+    // Clear nav stack when clicking from list
+    clearNavStack();
+
+    // Determine content type from item
+    const isAnime = "episodes" in item;
+    const isManga = ("volumes" in item || "chapters" in item) && !isAnime;
+    const newType = isAnime ? "anime" : isManga ? "manga" : "characters";
+
+    // Change content type if currently in profile or user_rates
+    if (contentType === "profile" || contentType === "user_rates") {
+      setContentType(newType as ContentType);
+    }
+
+    handleContentClick(item);
+  }, [handleContentClick, userRatesFilter, clearNavStack, contentType]);
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -317,11 +422,9 @@ function App() {
             data={detailData as CharacterDetail}
             loading={loadingDetail}
             error={detailError}
-            onBack={handleBackToList}
-            onNavigate={(type: ContentType, id: number) => {
-              setSelectedItem({ type, id });
-              setDetailData(null);
-            }}
+            onBack={handleBack}
+            onNavigate={handleNavigate}
+            hasParentView={navStack.length > 0}
           />
         ) : (
           <DetailView
@@ -329,14 +432,13 @@ function App() {
             type={selectedItem.type as "anime" | "manga"}
             loading={loadingDetail}
             error={detailError}
-            onBack={handleBackToList}
-            onNavigate={(type: ContentType, id: number) => {
-              setSelectedItem({ type, id });
-              setDetailData(null);
-            }}
+            onBack={handleBack}
+            onNavigate={handleNavigate}
+            user={user}
             onSearchGenre={(genreId, _genreName) => {
               setSelectedItem(null);
               setDetailData(null);
+              clearNavStack();
               setContentType(selectedItem!.type as ContentType);
               setGenreFilter([genreId.toString()]);
               setSearchQuery("");
@@ -344,17 +446,60 @@ function App() {
             onSearchStudio={(_studioId, studioName) => {
               setSelectedItem(null);
               setDetailData(null);
+              clearNavStack();
               setContentType("anime");
               setSearchQuery(studioName);
             }}
             onSearchPublisher={(_publisherId, publisherName) => {
               setSelectedItem(null);
               setDetailData(null);
+              clearNavStack();
               setContentType("manga");
               setSearchQuery(publisherName);
             }}
           />
         )
+      ) : contentType === "profile" ? (
+        authLoading ? (
+          <div className="loading-screen">Загрузка...</div>
+        ) : !isAuthenticated ? (
+          <LoginScreen
+            onAuthSuccess={checkAuth}
+            onClose={() => {
+              clearNavStack();
+              setContentType("anime");
+            }}
+          />
+        ) : user ? (
+          <ProfileScreen
+            user={user}
+            onLogout={() => {
+              logout();
+              clearNavStack();
+              setContentType("anime");
+            }}
+            onNavigateToRates={(status, type) => {
+              clearNavStack();
+              setUserRatesFilter({ status, type });
+              setContentType("user_rates");
+            }}
+            onContentClick={handleContentClickWithReset}
+          />
+        ) : (
+          <div className="loading-screen">Загрузка данных пользователя...</div>
+        )
+      ) : contentType === "user_rates" && userRatesFilter ? (
+          <UserRatesList
+            status={userRatesFilter.status}
+            type={userRatesFilter.type}
+            onBack={() => {
+              setUserRatesFilter(null);
+              clearNavStack();
+              setContentType("profile");
+            }}
+            onContentClick={handleContentClickWithReset}
+            user={user}
+          />
       ) : (
         <>
           <Search
@@ -369,7 +514,7 @@ function App() {
             onSortChange={handleSortChangeWithAnim}
             searchHistory={searchHistory}
             showHistory={showHistory}
-            onHistorySelect={handleHistorySelectWithReset}
+            onHistorySelect={handleHistorySelect}
             onSearchFocus={handleSearchFocus}
             onSearchKeyDown={handleSearchKeyDown}
             onHistoryClose={handleHistoryClose}

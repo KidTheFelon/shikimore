@@ -27,11 +27,11 @@
 
 /* Анимация скроллинга */
 @keyframes marquee {
-  0%, 30% { 
-    transform: translateX(0); 
+  0%, 20% {
+    transform: translateX(0);
   }
-  100% { 
-    transform: translateX(-50%); 
+  100% {
+    transform: translateX(-50%);
   }
 }
 
@@ -224,5 +224,93 @@
 }
 
 .voiceActorMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для заголовков в DetailView */
+.detailTitleContainer {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.detailTitleContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+.detailTitleMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.detailTitleMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для названий видео */
+.videoNameContainer {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.videoNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.videoNameMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.videoNameMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для похожего аниме */
+.similarTitleContainer {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.similarTitleContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.similarTitleMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.similarTitleMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+/* Для recent names в ProfileScreen */
+.recentNameContainer {
+  width: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+.recentNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 85%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 85%, transparent 100%);
+}
+
+.recentNameMarqueeInner {
+  display: inline-flex;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.recentNameMarqueeInner.isMarquee {
   animation: marquee var(--marquee-duration, 5s) linear infinite;
 }

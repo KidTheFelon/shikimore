@@ -137,6 +137,7 @@ export interface Anime {
   status?: string;
   episodes?: number;
   episodes_aired?: number;
+  aired_on?: Date;
 }
 
 export interface Manga {
@@ -289,7 +290,7 @@ export interface Person {
 }
 
 export type ContentItem = Anime | Manga | Character | Person;
-export type ContentType = "anime" | "manga" | "characters" | "people";
+export type ContentType = "anime" | "manga" | "characters" | "people" | "profile" | "user_rates";
 export type SortOption =
   | "relevance"
   | "score"
@@ -313,4 +314,94 @@ export interface Toast {
   id: string;
   message: string;
   type: "success" | "error" | "info";
+}
+
+// OAuth types
+export interface OAuthTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  created_at: number;
+  expires_in: number;
+  token_type: string;
+}
+
+export interface UserInfo {
+  id: number;
+  nickname: string;
+  avatar?: string;
+  image?: UserImage;
+  url: string;
+  rates_anime_stats?: UserStats;
+  rates_manga_stats?: UserStats;
+  gender?: string;
+  age?: number;
+  website?: string;
+  about?: string;
+  show_comments?: boolean;
+}
+
+export interface UserStats {
+  completed: number;
+  dropped: number;
+  on_hold: number;
+  planned: number;
+  watching: number;
+}
+
+export interface UserRate {
+  id: number;
+  score?: string;
+  status: string;
+  text?: string;
+  text_html?: string;
+  rewatches?: number;
+  episodes?: number;
+  volumes?: number;
+  chapters?: number;
+  anime?: Anime;
+  manga?: Manga;
+}
+
+// Simplified version for API responses without nested objects
+export interface UserRateSimple {
+  id: number;
+  score?: string;
+  status: string;
+  text?: string;
+  text_html?: string;
+  rewatches?: number;
+  episodes?: number;
+  volumes?: number;
+  chapters?: number;
+}
+
+export interface UserImage {
+  original?: string;
+  preview?: string;
+  x160?: string;
+  x80?: string;
+  x48?: string;
+}
+
+export interface CreateUserRateRequest {
+  user_id: number;
+  target_id: number;
+  target_type: string;
+  score?: string;
+  status?: string;
+  episodes?: string;
+  chapters?: string;
+  volumes?: string;
+  rewatches?: string;
+  text?: string;
+}
+
+export interface UpdateUserRateRequest {
+  score?: string;
+  status?: string;
+  episodes?: string;
+  chapters?: string;
+  volumes?: string;
+  rewatches?: string;
+  text?: string;
 }

@@ -1,0 +1,520 @@
+/* CharacterDetailView CSS Module - matching DetailView styles */
+
+/* CSS Variables for magic numbers */
+:root {
+  --card-width: 120px;
+  --card-height: 170px;
+  --poster-width: 280px;
+  --card-padding: 0.85rem;
+}
+
+/* Animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Main container */
+.detailView {
+  padding-top: 2rem;
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Back button */
+.detailBackBtn {
+  position: fixed;
+  top: 6rem;
+  left: 2rem;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: inherit;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  text-decoration: none;
+}
+
+.detailBackBtn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (min-width: 1664px) {
+  .detailBackBtn {
+    left: calc((100vw - 1600px) / 2 + 2rem);
+  }
+}
+
+.detailBackBtn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateX(-4px) translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="light"] .detailBackBtn:hover {
+  background: var(--bg-secondary);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.backArrow {
+  font-weight: bold;
+}
+
+/* Loading and error states */
+.detailLoading,
+.detailError {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: 1rem;
+  text-align: center;
+}
+
+.detailError {
+  color: var(--error);
+}
+
+/* Header layout */
+.detailHeader {
+  display: grid;
+  grid-template-columns: var(--poster-width) 1fr;
+  gap: 2rem;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border);
+}
+
+@media (max-width: 768px) {
+  .detailHeader {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* Poster */
+.detailPosterWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2/3;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-lg);
+}
+
+.detailPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.detailPosterPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* Header content */
+.detailHeaderContent {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Titles */
+.detailTitle {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.detailRussian {
+  font-size: clamp(1.25rem, 3vw, 1.75rem);
+  font-weight: 500;
+  margin: 0;
+  color: var(--text-secondary);
+  opacity: 0.9;
+}
+
+.detailEnglish {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: -0.5rem;
+  margin-bottom: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.detailTitleRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 2rem;
+  width: 100%;
+}
+
+.detailMainTitles {
+  flex: 1;
+}
+
+/* Meta */
+.detailMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.detailBadge {
+  padding: 0.4rem 0.9rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.animeLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.9rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.animeLink:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+
+.animeLinkIcon {
+  width: 14px;
+  height: 14px;
+}
+
+/* Info grid */
+.detailInfoGridHeader {
+  margin-top: 1.5rem;
+}
+
+.detailInfoChipsGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+/* Description */
+.detailHeaderDescriptionWrapper {
+  margin-top: 1.5rem;
+}
+
+.detailHeaderDescription {
+  font-size: 1rem;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  position: relative;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  -webkit-box-orient: vertical;
+}
+
+.detailHeaderDescription.expanded {
+  -webkit-line-clamp: unset;
+  line-clamp: unset;
+}
+
+/* Content sections */
+.detailContent {
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: relative;
+}
+
+.detailSectionTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary);
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--border);
+}
+
+/* Roles horizontal scroll */
+.detailRoles {
+  margin: 0 -1rem;
+  padding: 0.5rem 0.2rem 1.5rem;
+}
+
+/* Separators */
+.relatedSeparator {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 100%;
+  margin: 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 1;
+}
+
+.relatedSeparator.firstSeparator {
+  margin-top: 0;
+}
+
+.relatedSeparatorText {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  text-transform: uppercase;
+  padding: 0.5rem;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.relatedSeparator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(to bottom, 
+    transparent, 
+    color-mix(in srgb, var(--text-muted) 10%, transparent) 20%, 
+    color-mix(in srgb, var(--text-muted) 10%, transparent) 80%, 
+    transparent
+  );
+}
+
+/* Shared card styles */
+.roleCard,
+.voiceActorCard {
+  flex: 0 0 auto;
+  width: var(--card-width);
+  background: var(--bg-secondary);
+  border: 3px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: var(--transition);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+@media (max-width: 480px) {
+  .roleCard,
+  .voiceActorCard {
+    width: 100px;
+  }
+  
+  .rolePosterWrapper,
+  .voiceActorPosterWrapper {
+    height: 140px;
+  }
+}
+
+.roleCard:hover,
+.voiceActorCard:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+.roleCard:focus-visible,
+.voiceActorCard:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.rolePosterWrapper,
+.voiceActorPosterWrapper {
+  position: relative;
+  width: 100%;
+  height: var(--card-height);
+  overflow: hidden;
+}
+
+.rolePoster,
+.voiceActorPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rolePosterPlaceholder,
+.voiceActorPosterPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.roleInfo,
+.voiceActorInfo {
+  padding: var(--card-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.roleType {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.roleTitle,
+.voiceActorName {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.roleText {
+  white-space: nowrap;
+}
+
+/* Role badge */
+.roleBadge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 2;
+  max-width: 85%;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+/* Marquee container styles */
+.roleMarqueeContainer,
+.languageMarqueeContainer {
+  width: 100%;
+  overflow: hidden;
+}
+
+.roleMarqueeInner,
+.languageMarqueeInner {
+  display: flex;
+  align-items: center;
+}
+
+.roleMarqueeInner.isMarquee,
+.languageMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 10s) linear infinite;
+}
+
+@keyframes marquee {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+.roleCard:hover .roleBadge {
+  background: var(--primary);
+  color: white;
+  border-color: transparent;
+}
+
+/* Utility */
+.clickable {
+  cursor: pointer;
+}
+
+
+.languageBadge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--primary);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  z-index: 2;
+  max-width: 70px;
+  overflow: hidden;
+  padding: 0.25rem 0.5rem;
+}
+
+.voiceActorCard:hover .languageBadge {
+  background: var(--primary);
+  color: white;
+}

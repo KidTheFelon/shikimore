@@ -1,0 +1,169 @@
+/* Section styles */
+.detailSection {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: relative;
+}
+
+.detailSectionTitle {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin: 0 0 1.5rem 0;
+  color: var(--text-primary);
+  padding-bottom: 0.75rem;
+}
+
+/* Character cards */
+.characterCard {
+  flex: 0 0 160px;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border: 3px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  transition: var(--transition);
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.characterCard:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-color, var(--primary));
+}
+
+.characterCard.clickable {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.characterCard.clickable:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+}
+
+.characterPosterWrapper {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 2/3;
+  overflow: hidden;
+}
+
+.characterPoster {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.characterCard:hover .characterPoster {
+  transform: scale(1.08);
+}
+
+.characterPosterPlaceholder {
+  width: 100%;
+  aspect-ratio: 2/3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.characterInfo {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Role badges and marquee */
+.roleBadge {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  padding: 0.25rem 0.6rem;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--primary);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  z-index: 2;
+  max-width: 85%;
+  overflow: hidden;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s ease;
+}
+
+.characterCard:hover .roleBadge {
+  background: var(--primary);
+  color: white;
+  border-color: transparent;
+}
+
+.roleText {
+  white-space: nowrap;
+}
+
+/* Character info and name styles */
+.characterNameContainer {
+  width: 100%;
+  height: 1.25rem;
+  overflow: hidden;
+  position: relative;
+}
+
+.characterNameContainer.hasMarquee {
+  mask-image: linear-gradient(to right, black 90%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
+}
+
+.characterMarqueeInner {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  gap: 2rem;
+}
+
+.characterMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+.characterCard:hover .roleMarqueeInner.isMarquee {
+  animation: marquee var(--marquee-duration, 5s) linear infinite;
+}
+
+.characterName {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.25rem;
+  white-space: nowrap;
+}
+
+.characterName.spacer {
+  padding-left: 0;
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.clickable {
+  cursor: pointer;
+}

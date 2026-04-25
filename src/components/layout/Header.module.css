@@ -1,0 +1,260 @@
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 1rem 1rem 1rem;
+  margin-bottom: 0;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  transition: padding 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  user-select: none;
+}
+
+.header[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+}
+
+.headerScrolled {
+  padding: 0.75rem 1.5rem;
+}
+
+.headerContent {
+  flex: 1;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+}
+
+.headerScrolled .headerText {
+  transform: scale(0.95);
+}
+
+.windowControls {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding-top: 0.5rem;
+  z-index: 101;
+  position: relative;
+  -webkit-app-region: no-drag;
+  user-select: none;
+  flex-shrink: 0;
+  transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
+}
+
+.headerScrolled .windowControls {
+  padding-top: 0.75rem;
+}
+
+.windowControlBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 32px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  position: relative;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.windowControlBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.windowControlBtn:active {
+  background: var(--bg-active);
+}
+
+.windowControlClose:hover {
+  background: rgba(232, 17, 35, 0.9);
+  color: #fff;
+}
+
+.windowControlClose:active {
+  background: rgba(232, 17, 35, 1);
+}
+
+.windowControlBtn svg {
+  width: 12px;
+  height: 12px;
+}
+
+.title {
+  font-family: 'SamuraiWarrior', sans-serif;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: normal;
+  line-height: 1.1;
+  margin: 0 0 0.5rem 0;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.02em;
+  text-transform: uppercase;
+  transition: font-size 0.3s cubic-bezier(0.4, 0, 0.2, 1), margin 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.headerScrolled .title {
+  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 0.9rem;
+  margin-top: 0.5rem;
+  color: var(--text-muted);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  overflow: hidden;
+}
+
+.subtitle kbd {
+  padding: 0.25rem 0.5rem;
+  background: var(--bg-active);
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+.profileButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.2s ease, color 0.2s ease, transform 0.2s ease;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+}
+
+.profileButton:hover {
+  background: var(--bg-active);
+  color: var(--text-primary);
+  transform: scale(1.05);
+}
+
+.profileButton:active {
+  background: var(--bg-hover);
+  transform: scale(0.95);
+}
+
+.themeSwitcher {
+  position: relative;
+  width: 56px;
+  height: 28px;
+  border-radius: 14px;
+  background-color: var(--bg-hover);
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 6px;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--border);
+}
+
+.themeSwitcher::before {
+  content: '';
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: var(--primary);
+  top: 3px;
+  left: 3px;
+  transition: transform 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.themeSwitcher.dark::before {
+  transform: translateX(28px);
+  background-color: var(--accent);
+}
+
+.themeSwitcher svg {
+  width: 14px;
+  height: 14px;
+  stroke: var(--text-secondary);
+  transition: opacity 0.3s ease, stroke 0.3s ease;
+  z-index: 1;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.themeSwitcher .sunIcon {
+  left: 13px;
+  width: 6px;
+  height: 6px;
+}
+
+.themeSwitcher .moonIcon {
+  left: 41px;
+  width: 12px;
+  height: 12px;
+}
+
+.themeSwitcher .sunIcon {
+  opacity: 1;
+}
+
+.themeSwitcher .moonIcon {
+  opacity: 0.3;
+}
+
+.themeSwitcher.dark .sunIcon {
+  opacity: 0.3;
+}
+
+.themeSwitcher.dark .moonIcon {
+  opacity: 1;
+}

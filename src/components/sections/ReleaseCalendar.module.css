@@ -1,0 +1,153 @@
+.container {
+  margin-bottom: 24px;
+  padding: 20px 32px;
+  background: var(--bg-secondary);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  clip-path: inset(0 0 0 0 round 20px);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.viewToggle {
+  display: flex;
+  gap: 8px;
+  background: var(--bg-primary);
+  padding: 4px;
+  border-radius: 10px;
+}
+
+.toggleButton {
+  padding: 8px 16px;
+  background: transparent;
+  color: var(--text-secondary);
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggleButton:hover {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+
+.toggleButton.active {
+  background: var(--primary);
+  color: white;
+}
+
+.loading,
+.error,
+.empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.error {
+  color: #ef4444;
+}
+
+.releaseCard {
+  flex-shrink: 0;
+  width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 8px;
+  border: 3px solid var(--border);
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.releaseCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.releasePoster {
+  width: 100%;
+  aspect-ratio: 2/3;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  position: relative;
+}
+
+.posterImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kindChip {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+}
+
+.releaseInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.releaseDate {
+  font-size: 11px;
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.releaseTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.releaseKind {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 20px 24px;
+  }
+
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .releasesGrid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 10px;
+  }
+}

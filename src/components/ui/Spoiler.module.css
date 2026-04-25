@@ -1,0 +1,50 @@
+.spoiler {
+  margin: 0.5rem 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+.spoilerLabel {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  background: var(--bg-primary);
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  transition: all 0.2s ease;
+}
+
+.spoilerLabel:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+[data-theme="light"] .spoilerLabel:hover {
+  background: var(--bg-secondary);
+}
+
+.chevron {
+  transition: transform 0.3s ease;
+}
+
+.spoiler.expanded .chevron {
+  transform: rotate(180deg);
+}
+
+.spoilerContent {
+  padding: 0 1rem;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s ease, padding 0.3s ease;
+}
+
+.spoiler.expanded .spoilerContent {
+  padding: 1rem;
+  max-height: 2000px;
+}

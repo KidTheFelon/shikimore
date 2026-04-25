@@ -13,7 +13,7 @@ pub fn init_logger() -> Result<(), Box<dyn std::error::Error>> {
             .directory("logs")
             .basename("shikimore"))
         .write_mode(WriteMode::Direct)
-        .duplicate_to_stderr(Duplicate::Info)
+        .duplicate_to_stderr(Duplicate::All)
         .start()?;
 
     Ok(())

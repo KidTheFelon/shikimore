@@ -1,0 +1,175 @@
+.overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.container {
+  position: relative;
+  width: 90%;
+  max-width: 1000px;
+  animation: slideUp 0.3s ease-out;
+}
+
+.close {
+  position: absolute;
+  top: -40px;
+  right: 0;
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+
+.close:hover {
+  opacity: 0.7;
+}
+
+.wrapper {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.player {
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.closing {
+  animation: fadeOut 0.2s ease-out forwards;
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.navButton {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.2s;
+  z-index: 10;
+}
+
+.navButton:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.navButton:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.navPrev {
+  left: 1rem;
+}
+
+.navNext {
+  right: 1rem;
+}
+
+.thumbnailsCarousel {
+  position: absolute;
+  bottom: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 0.5rem;
+  max-width: 80vw;
+  overflow-x: auto;
+  padding: 0.5rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.3) transparent;
+}
+
+.thumbnailsCarousel::-webkit-scrollbar {
+  height: 4px;
+}
+
+.thumbnailsCarousel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.thumbnailsCarousel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+}
+
+.thumbnail {
+  flex: 0 0 120px;
+  height: 68px;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: all 0.2s ease-out;
+  border: 2px solid transparent;
+}
+
+.thumbnail:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+.thumbnailActive {
+  opacity: 1;
+  border-color: #ff0000;
+  transform: scale(1.1);
+}
+
+.thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

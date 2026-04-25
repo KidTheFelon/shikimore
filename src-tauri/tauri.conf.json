@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://shikimori.io https://*.shikimori.io; connect-src 'self' http://localhost:1420 https://shikimori.io https://*.shikimori.io",
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: asset: http://localhost:1420; connect-src 'self' http://localhost:1420 https:;",
       "capabilities": [
         {
           "identifier": "main-capability",
@@ -33,11 +33,17 @@
             "core:window:allow-toggle-maximize",
             "core:window:allow-close",
             "shell:allow-open",
-            "http:default"
+            "http:default",
+            "core:event:allow-listen",
+            "core:event:default",
+            "core:default",
+            "core:path:default",
+            "core:resources:default"
           ]
         }
       ]
-    }
+    },
+    "withGlobalTauri": true
   },
   "bundle": {
     "active": true,
@@ -49,5 +55,13 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "shell": {
+      "open": true
+    },
+    "deepLink": {
+      "schemes": ["shikimore"]
+    }
   }
 }
