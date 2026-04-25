@@ -30,6 +30,6 @@ src-tauri/.env
 
 # Schema
 schema_full.json
-introspectionSchema (2).json
+introspectionSchema.json
 schema.graphql
 shikimori_api_docs.md
