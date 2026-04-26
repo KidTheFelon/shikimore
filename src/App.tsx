@@ -23,14 +23,17 @@ import type {
   MangaDetail,
   CharacterDetail,
   Toast,
-  ContentItem
+  ContentItem,
 } from "./types";
 import "./styles/globals.css";
 import "./App.css";
 
 function App() {
   const [contentType, setContentType] = useState<ContentType>("anime");
-  const [userRatesFilter, setUserRatesFilter] = useState<{ status: string; type: 'anime' | 'manga' } | null>(null);
+  const [userRatesFilter, setUserRatesFilter] = useState<{
+    status: string;
+    type: "anime" | "manga";
+  } | null>(null);
 
   // Auth hook
   const {
@@ -53,7 +56,7 @@ function App() {
     resetContent,
     setCurrentPage,
   } = useContent(contentType);
-  
+
   const {
     searchQuery,
     setSearchQuery,
@@ -76,7 +79,7 @@ function App() {
     addToHistory,
     resetFilters,
   } = useSearch();
-  
+
   const {
     selectedItem,
     detailData,
@@ -89,8 +92,12 @@ function App() {
   } = useDetail();
 
   // Navigation stack for back/forward navigation
-  const [navStack, setNavStack] = useState<Array<{ type: ContentType; id: number }>>([]);
-  const [forwardStack, setForwardStack] = useState<Array<{ type: ContentType; id: number }>>([]);
+  const [navStack, setNavStack] = useState<
+    Array<{ type: ContentType; id: number }>
+  >([]);
+  const [forwardStack, setForwardStack] = useState<
+    Array<{ type: ContentType; id: number }>
+  >([]);
   const MAX_NAV_STACK_SIZE = 10;
 
   const clearNavStack = useCallback(() => {
@@ -98,29 +105,37 @@ function App() {
     setForwardStack([]);
   }, []);
 
-  const handleNavigate = useCallback((type: ContentType, id: number) => {
-    // Push current item to stack if navigating to a different item
-    if (selectedItem && (selectedItem.type !== type || selectedItem.id !== id)) {
-      setNavStack(prev => {
-        const newStack = [...prev, selectedItem];
-        // Limit stack size to prevent memory issues
-        return newStack.length > MAX_NAV_STACK_SIZE ? newStack.slice(-MAX_NAV_STACK_SIZE) : newStack;
-      });
-      // Clear forward stack when navigating to new item
-      setForwardStack([]);
-    }
-    setSelectedItem({ type, id });
-    setDetailData(null);
-  }, [selectedItem, setSelectedItem, setDetailData]);
+  const handleNavigate = useCallback(
+    (type: ContentType, id: number) => {
+      // Push current item to stack if navigating to a different item
+      if (
+        selectedItem &&
+        (selectedItem.type !== type || selectedItem.id !== id)
+      ) {
+        setNavStack((prev) => {
+          const newStack = [...prev, selectedItem];
+          // Limit stack size to prevent memory issues
+          return newStack.length > MAX_NAV_STACK_SIZE
+            ? newStack.slice(-MAX_NAV_STACK_SIZE)
+            : newStack;
+        });
+        // Clear forward stack when navigating to new item
+        setForwardStack([]);
+      }
+      setSelectedItem({ type, id });
+      setDetailData(null);
+    },
+    [selectedItem, setSelectedItem, setDetailData],
+  );
 
   const handleBack = useCallback(() => {
     if (navStack.length > 0) {
       // Pop from stack and navigate back
       const prevItem = navStack[navStack.length - 1];
-      setNavStack(prev => prev.slice(0, -1));
+      setNavStack((prev) => prev.slice(0, -1));
       // Push current item to forward stack
       if (selectedItem) {
-        setForwardStack(prev => [...prev, selectedItem]);
+        setForwardStack((prev) => [...prev, selectedItem]);
       }
       setSelectedItem(prevItem);
       setDetailData(null);
@@ -129,16 +144,23 @@ function App() {
       handleBackToList();
       clearNavStack();
     }
-  }, [navStack, selectedItem, handleBackToList, setSelectedItem, setDetailData, clearNavStack]);
+  }, [
+    navStack,
+    selectedItem,
+    handleBackToList,
+    setSelectedItem,
+    setDetailData,
+    clearNavStack,
+  ]);
 
   const handleForward = useCallback(() => {
     if (forwardStack.length > 0) {
       // Pop from forward stack and navigate forward
       const nextItem = forwardStack[forwardStack.length - 1];
-      setForwardStack(prev => prev.slice(0, -1));
+      setForwardStack((prev) => prev.slice(0, -1));
       // Push current item to nav stack
       if (selectedItem) {
-        setNavStack(prev => [...prev, selectedItem]);
+        setNavStack((prev) => [...prev, selectedItem]);
       }
       setSelectedItem(nextItem);
       setDetailData(null);
@@ -149,9 +171,15 @@ function App() {
   const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const { cardColors, handleImageLoad } = useAccentColor();
   const [toasts, setToasts] = useState<Toast[]>([]);
-  const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null);
-  const [exitDirection, setExitDirection] = useState<'left' | 'right' | null>(null);
-  const [animationPhase, setAnimationPhase] = useState<'exiting' | 'entering' | 'none'>('none');
+  const [slideDirection, setSlideDirection] = useState<"left" | "right" | null>(
+    null,
+  );
+  const [exitDirection, setExitDirection] = useState<"left" | "right" | null>(
+    null,
+  );
+  const [animationPhase, setAnimationPhase] = useState<
+    "exiting" | "entering" | "none"
+  >("none");
   const [filterAnimationKey, setFilterAnimationKey] = useState(0);
 
   // Refs
@@ -160,7 +188,9 @@ function App() {
 
   // Load initial content on startup
   useEffect(() => {
-    logger.info(`[Frontend] App started, loading initial content for ${contentType}`);
+    logger.info(
+      `[Frontend] App started, loading initial content for ${contentType}`,
+    );
     fetchContent(contentType, "", 1, kindFilter, genreFilter, sortBy, false);
   }, [contentType]);
 
@@ -174,9 +204,9 @@ function App() {
 
   // Reset animation phase after content loads
   useEffect(() => {
-    if (animationPhase === 'entering' && !loading && contentList.length > 0) {
+    if (animationPhase === "entering" && !loading && contentList.length > 0) {
       const timer = setTimeout(() => {
-        setAnimationPhase('none');
+        setAnimationPhase("none");
         setSlideDirection(null);
         setExitDirection(null);
       }, 400);
@@ -195,11 +225,13 @@ function App() {
   }, [filterAnimationKey, loading, contentList.length]);
 
   // Toast notifications
-  const showToast = useCallback((message: string, type: Toast["type"] = "success") => {
-    const id = Math.random().toString(36).substr(2, 9);
-    setToasts((prev) => [...prev, { id, message, type }]);
-  }, []);
-
+  const showToast = useCallback(
+    (message: string, type: Toast["type"] = "success") => {
+      const id = Math.random().toString(36).substr(2, 9);
+      setToasts((prev) => [...prev, { id, message, type }]);
+    },
+    [],
+  );
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -217,15 +249,19 @@ function App() {
         }
       }
       // Arrow navigation for cards
-      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && contentItemsRef.current.length > 0) {
+      if (
+        (e.key === "ArrowDown" || e.key === "ArrowUp") &&
+        contentItemsRef.current.length > 0
+      ) {
         const currentIndex = contentItemsRef.current.findIndex(
-          (el) => el === document.activeElement
+          (el) => el === document.activeElement,
         );
         if (currentIndex !== -1) {
           e.preventDefault();
-          const nextIndex = e.key === "ArrowDown"
-            ? Math.min(currentIndex + 1, contentItemsRef.current.length - 1)
-            : Math.max(currentIndex - 1, 0);
+          const nextIndex =
+            e.key === "ArrowDown"
+              ? Math.min(currentIndex + 1, contentItemsRef.current.length - 1)
+              : Math.max(currentIndex - 1, 0);
           contentItemsRef.current[nextIndex]?.focus();
         }
       }
@@ -233,7 +269,13 @@ function App() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedItem, searchInputRef, handleBack, setSearchQuery, contentList.length]);
+  }, [
+    selectedItem,
+    searchInputRef,
+    handleBack,
+    setSearchQuery,
+    contentList.length,
+  ]);
 
   // Mouse button shortcuts (back/forward buttons)
   useEffect(() => {
@@ -299,7 +341,15 @@ function App() {
 
     debounceTimerRef.current = window.setTimeout(() => {
       resetContent();
-      fetchContent(contentType, searchQuery, 1, kindFilter, genreFilter, sortBy, false);
+      fetchContent(
+        contentType,
+        searchQuery,
+        1,
+        kindFilter,
+        genreFilter,
+        sortBy,
+        false,
+      );
       addToHistory(searchQuery);
     }, 400);
 
@@ -308,27 +358,63 @@ function App() {
         window.clearTimeout(debounceTimerRef.current);
       }
     };
-  }, [searchQuery, kindFilter, genreFilter, sortBy, contentType, fetchContent, addToHistory, resetContent]);
+  }, [
+    searchQuery,
+    kindFilter,
+    genreFilter,
+    sortBy,
+    contentType,
+    fetchContent,
+    addToHistory,
+    resetContent,
+  ]);
 
   // Lazy pagination
   useEffect(() => {
     const handleScroll = () => {
-      if (!loading && !loadingMore && hasMore && (searchQuery || contentType === "characters") && contentList.length > 0) {
+      if (
+        !loading &&
+        !loadingMore &&
+        hasMore &&
+        (searchQuery || contentType === "characters") &&
+        contentList.length > 0
+      ) {
         const windowHeight = window.innerHeight;
         const documentHeight = document.documentElement.scrollHeight;
         const scrollTop = window.scrollY || document.documentElement.scrollTop;
-        
+
         if (scrollTop + windowHeight >= documentHeight * 0.8) {
           const nextPage = currentPage + 1;
           setCurrentPage(nextPage);
-          fetchContent(contentType, searchQuery, nextPage, kindFilter, genreFilter, sortBy, true);
+          fetchContent(
+            contentType,
+            searchQuery,
+            nextPage,
+            kindFilter,
+            genreFilter,
+            sortBy,
+            true,
+          );
         }
       }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, [loading, loadingMore, hasMore, searchQuery, currentPage, kindFilter, genreFilter, sortBy, contentType, fetchContent, contentList.length, setCurrentPage]);
+  }, [
+    loading,
+    loadingMore,
+    hasMore,
+    searchQuery,
+    currentPage,
+    kindFilter,
+    genreFilter,
+    sortBy,
+    contentType,
+    fetchContent,
+    contentList.length,
+    setCurrentPage,
+  ]);
 
   // Content type change with animation
   const handleContentTypeChange = (newType: ContentType) => {
@@ -340,7 +426,7 @@ function App() {
 
     setSlideDirection(enterDirection);
     setExitDirection(exitDir);
-    setAnimationPhase('exiting');
+    setAnimationPhase("exiting");
 
     if (contentTypeChangeTimerRef.current) {
       clearTimeout(contentTypeChangeTimerRef.current);
@@ -350,50 +436,53 @@ function App() {
       resetContent();
       resetFilters();
       clearNavStack();
-      setAnimationPhase('entering');
+      setAnimationPhase("entering");
       fetchContent(newType, "", 1, "", [], sortBy, false);
     }, 300);
   };
 
   // Filter changes with animation
   const handleKindChangeWithAnim = (value: string) => {
-    setFilterAnimationKey(prev => prev + 1);
+    setFilterAnimationKey((prev) => prev + 1);
     handleKindChange(value);
     resetContent();
   };
 
   const handleGenreChangeWithAnim = (value: string) => {
-    setFilterAnimationKey(prev => prev + 1);
+    setFilterAnimationKey((prev) => prev + 1);
     handleGenreChange(value);
     resetContent();
   };
 
   const handleSortChangeWithAnim = (value: SortOption) => {
-    setFilterAnimationKey(prev => prev + 1);
+    setFilterAnimationKey((prev) => prev + 1);
     handleSortChange(value);
     resetContent();
   };
 
-  const handleContentClickWithReset = useCallback((item: ContentItem) => {
-    // Reset user rates filter when navigating to details
-    if (userRatesFilter) {
-      setUserRatesFilter(null);
-    }
-    // Clear nav stack when clicking from list
-    clearNavStack();
+  const handleContentClickWithReset = useCallback(
+    (item: ContentItem) => {
+      // Reset user rates filter when navigating to details
+      if (userRatesFilter) {
+        setUserRatesFilter(null);
+      }
+      // Clear nav stack when clicking from list
+      clearNavStack();
 
-    // Determine content type from item
-    const isAnime = "episodes" in item;
-    const isManga = ("volumes" in item || "chapters" in item) && !isAnime;
-    const newType = isAnime ? "anime" : isManga ? "manga" : "characters";
+      // Determine content type from item
+      const isAnime = "episodes" in item;
+      const isManga = ("volumes" in item || "chapters" in item) && !isAnime;
+      const newType = isAnime ? "anime" : isManga ? "manga" : "characters";
 
-    // Change content type if currently in profile or user_rates
-    if (contentType === "profile" || contentType === "user_rates") {
-      setContentType(newType as ContentType);
-    }
+      // Change content type if currently in profile or user_rates
+      if (contentType === "profile" || contentType === "user_rates") {
+        setContentType(newType as ContentType);
+      }
 
-    handleContentClick(item);
-  }, [handleContentClick, userRatesFilter, clearNavStack, contentType]);
+      handleContentClick(item);
+    },
+    [handleContentClick, userRatesFilter, clearNavStack, contentType],
+  );
 
   // Cleanup timer on unmount
   useEffect(() => {
@@ -405,11 +494,19 @@ function App() {
   }, []);
 
   const handleRetry = () => {
-    fetchContent(contentType, searchQuery, currentPage, kindFilter, genreFilter, sortBy, false);
+    fetchContent(
+      contentType,
+      searchQuery,
+      currentPage,
+      kindFilter,
+      genreFilter,
+      sortBy,
+      false,
+    );
   };
 
   return (
-    <div className={`container ${selectedItem ? "containerDetail" : ""}`}>
+    <div className={`container ${selectedItem ? "container-detail" : ""}`}>
       <Header
         isScrolled={isHeaderScrolled}
         hasSelectedItem={!!selectedItem}
@@ -489,17 +586,17 @@ function App() {
           <div className="loading-screen">Загрузка данных пользователя...</div>
         )
       ) : contentType === "user_rates" && userRatesFilter ? (
-          <UserRatesList
-            status={userRatesFilter.status}
-            type={userRatesFilter.type}
-            onBack={() => {
-              setUserRatesFilter(null);
-              clearNavStack();
-              setContentType("profile");
-            }}
-            onContentClick={handleContentClickWithReset}
-            user={user}
-          />
+        <UserRatesList
+          status={userRatesFilter.status}
+          type={userRatesFilter.type}
+          onBack={() => {
+            setUserRatesFilter(null);
+            clearNavStack();
+            setContentType("profile");
+          }}
+          onContentClick={handleContentClickWithReset}
+          user={user}
+        />
       ) : (
         <>
           <Search

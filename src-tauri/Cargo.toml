@@ -27,6 +27,7 @@ thiserror = "2.0"
 base64 = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
 futures = "0.3"
+rand = "0.8"
 
 [features]
 custom-protocol = ["tauri/custom-protocol"]

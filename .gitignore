@@ -29,7 +29,5 @@ src-tauri/Cargo.lock
 src-tauri/.env
 
 # Schema
-schema_full.json
-introspectionSchema.json
-schema.graphql
-shikimori_api_docs.md
+schemas/
+docs/

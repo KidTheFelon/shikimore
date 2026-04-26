@@ -1,8 +1,8 @@
-use rusqlite::{Connection, params, Result as SqliteResult};
+use rusqlite::{params, Connection, Result as SqliteResult};
 use std::path::PathBuf;
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 const CACHE_TTL_SECONDS: i64 = 7 * 24 * 60 * 60; // 7 дней
 
@@ -28,7 +28,10 @@ impl CacheMetrics {
     }
 
     pub fn get_stats(&self) -> (u64, u64) {
-        (self.hits.load(Ordering::Relaxed), self.misses.load(Ordering::Relaxed))
+        (
+            self.hits.load(Ordering::Relaxed),
+            self.misses.load(Ordering::Relaxed),
+        )
     }
 }
 
@@ -60,7 +63,7 @@ impl TextCache {
             metrics: CacheMetrics::new(),
         })
     }
-    
+
     pub fn get(&self, key: &str) -> SqliteResult<Option<String>> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -68,33 +71,30 @@ impl TextCache {
             .as_secs() as i64;
 
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT value FROM text_cache WHERE key = ?1 AND created_at > ?2"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT value FROM text_cache WHERE key = ?1 AND created_at > ?2")?;
 
-        let result = stmt.query_row(params![key, now - CACHE_TTL_SECONDS], |row| {
-            row.get(0)
-        });
+        let result = stmt.query_row(params![key, now - CACHE_TTL_SECONDS], |row| row.get(0));
 
         match result {
             Ok(value) => {
                 self.metrics.record_hit();
                 Ok(Some(value))
-            },
+            }
             Err(rusqlite::Error::QueryReturnedNoRows) => {
                 self.metrics.record_miss();
                 Ok(None)
-            },
+            }
             Err(e) => Err(e),
         }
     }
-    
+
     pub fn set(&self, key: &str, value: &str) -> SqliteResult<()> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        
+
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "INSERT OR REPLACE INTO text_cache (key, value, created_at) VALUES (?1, ?2, ?3)",
@@ -103,40 +103,30 @@ impl TextCache {
 
         Ok(())
     }
-    
+
     pub fn clear_expired(&self) -> SqliteResult<usize> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
-        
+
         let conn = self.conn.lock().unwrap();
         let deleted = conn.execute(
             "DELETE FROM text_cache WHERE created_at < ?1",
             params![now - CACHE_TTL_SECONDS],
         )?;
-        
+
         Ok(deleted)
     }
-    
-    pub fn clear_all(&self) -> SqliteResult<()> {
-        let conn = self.conn.lock().unwrap();
-        conn.execute("DELETE FROM text_cache", [])?;
-        Ok(())
-    }
-    
     pub fn invalidate(&self, key: &str) -> SqliteResult<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute("DELETE FROM text_cache WHERE key = ?1", [key])?;
         Ok(())
     }
-    
+
     pub fn invalidate_pattern(&self, pattern: &str) -> SqliteResult<usize> {
         let conn = self.conn.lock().unwrap();
-        let deleted = conn.execute(
-            "DELETE FROM text_cache WHERE key LIKE ?1",
-            [pattern]
-        )?;
+        let deleted = conn.execute("DELETE FROM text_cache WHERE key LIKE ?1", [pattern])?;
         Ok(deleted)
     }
 
@@ -146,8 +136,8 @@ impl TextCache {
 }
 
 pub fn get_cache_db_path() -> Result<PathBuf, String> {
-    let mut db_path = std::env::current_exe()
-        .map_err(|e| format!("Failed to get exe path: {}", e))?;
+    let mut db_path =
+        std::env::current_exe().map_err(|e| format!("Failed to get exe path: {}", e))?;
     db_path.pop(); // Remove exe filename
     db_path.push("text_cache.db");
     Ok(db_path)
